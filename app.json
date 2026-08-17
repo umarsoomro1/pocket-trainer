@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "PocketTrainer",
+    "name": "Pocket Trainer",
     "slug": "PocketTrainer",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -19,6 +19,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-font",
+      "expo-status-bar",
+      "expo-sqlite"
+    ]
   }
 }
