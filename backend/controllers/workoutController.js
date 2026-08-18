@@ -15,16 +15,16 @@ const generateAndAssignPlan = async (req, res) => {
     const generatedData = await generateWorkoutPlan(user, planType || "General");
 
     // 2. Loop through exercises and fetch GIFs from RapidAPI
+    // Step 2 in generateAndAssignPlan:
     for (let i = 0; i < generatedData.schedule.length; i++) {
       let day = generatedData.schedule[i];
-      
       if (day.exercises && day.exercises.length > 0) {
-        for (let j = 0; j < day.exercises.length; j++) {
-          let exercise = day.exercises[j];
-          
-          const gifUrl = await getExerciseGif(exercise.name);
-          exercise.gif_url = gifUrl || "https://via.placeholder.com/400x300.png?text=No+GIF+Available";
-        }
+        await Promise.all(
+          day.exercises.map(async (exercise) => {
+            const gifUrl = await getExerciseGif(exercise.name);
+            exercise.gif_url = gifUrl || null;
+          })
+        );
       }
     }
 
