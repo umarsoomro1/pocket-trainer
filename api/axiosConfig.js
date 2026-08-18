@@ -2,7 +2,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Use 10.0.2.2 for Android Emulators, or your IPv4 address (e.g., 192.168.1.X) for physical devices
-const API_URL = 'http://192.168.18.219:5000/api'; 
+const API_URL = 'https://symmetrical-lamp-7vr5x7qxjg57cr695-5000.app.github.dev/api'; 
 
 const api = axios.create({
   baseURL: API_URL,
