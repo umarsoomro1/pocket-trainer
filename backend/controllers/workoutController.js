@@ -122,7 +122,8 @@ const getTodaysWorkout = async (req, res) => {
       currentDay,
       totalDays: plan.schedule.length,
       session,
-      isCompletedToday
+      isCompletedToday,
+      lastWorkoutDate: user.last_workout_date
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
