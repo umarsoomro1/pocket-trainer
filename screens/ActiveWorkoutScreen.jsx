@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ActivityIndicator, SafeAreaView, Modal, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ActivityIndicator, SafeAreaView, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../api/axiosConfig';
 import { theme } from '../theme';
+import { Image } from 'expo-image';
 
 const ActiveWorkoutScreen = ({ route, navigation }) => {
   const { sessionData } = route.params;
