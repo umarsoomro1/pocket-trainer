@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Scr
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-chart-kit';
-import { Calendar } from 'react-native-calendars'; // RE-ADDED CALENDAR
+import { Calendar } from 'react-native-calendars';
 import api from '../api/axiosConfig';
 import { theme } from '../theme';
 
@@ -26,8 +26,9 @@ const DashboardScreen = ({ navigation }) => {
     [todayString]: { selected: true, marked: true, selectedColor: theme.accent, selectedTextColor: theme.background }
   });
 
-  // Countdown Timer State
-  const [timeToMidnight, setTimeToMidnight] = useState('');
+  // 24-Hour Countdown Timer State
+  const [timeRemaining, setTimeRemaining] = useState('');
+  const [isCooldownActive, setIsCooldownActive] = useState(false);
 
   const planOptions = ['Push Pull Legs (PPL)', 'Single Muscle (Bro Split)', 'Upper / Lower', 'Full Body'];
 
@@ -58,22 +59,42 @@ const DashboardScreen = ({ navigation }) => {
     }, [])
   );
 
-  // Midnight Countdown Logic
+  // Check if today is designated as a Rest Day
+  const isRestDay = 
+    todaysData?.session?.isRestDay || 
+    todaysData?.session?.title?.toLowerCase().includes('rest') ||
+    !todaysData?.session?.exercises ||
+    todaysData?.session?.exercises.length === 0;
+
+  // 24-Hour Cooldown Timer Logic
   useEffect(() => {
+    // Skip cooldown timer immediately if it is a rest day
+    if (isRestDay || !todaysData?.lastWorkoutDate) {
+      setIsCooldownActive(false);
+      return;
+    }
+
     const interval = setInterval(() => {
-      const now = new Date();
-      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-      const diff = tomorrow - now; // Difference in milliseconds
+      const completionTime = new Date(todaysData.lastWorkoutDate).getTime();
+      const unlockTime = completionTime + (24 * 60 * 60 * 1000); // 24-hour target
+      const now = new Date().getTime();
+      const diff = unlockTime - now;
 
-      const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const s = Math.floor((diff % (1000 * 60)) / 1000);
-
-      setTimeToMidnight(`${h}h ${m}m ${s}s`);
+      if (diff <= 0) {
+        setIsCooldownActive(false);
+        setTimeRemaining('');
+        clearInterval(interval);
+      } else {
+        setIsCooldownActive(true);
+        const h = Math.floor(diff / (1000 * 60 * 60));
+        const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const s = Math.floor((diff % (1000 * 60)) / 1000);
+        setTimeRemaining(`${h}h ${m}m ${s}s`);
+      }
     }, 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [todaysData, isRestDay]);
 
   const handleGeneratePlan = async () => {
     setIsGenerating(true);
@@ -96,9 +117,6 @@ const DashboardScreen = ({ navigation }) => {
       </View>
     );
   }
-
-  // Assuming your backend sends a boolean flag indicating if today's workout is done
-  const isCompletedToday = todaysData?.isCompletedToday || false; 
 
   return (
     <View style={{flex: 1, backgroundColor: theme.background}}>
@@ -184,14 +202,25 @@ const DashboardScreen = ({ navigation }) => {
               <View style={styles.divider} />
               <Text style={styles.sessionTitle}>{todaysData.session.title}</Text>
               
-              {/* CONDITIONAL BUTTON RENDER BASED ON COMPLETION STATUS */}
-              {isCompletedToday ? (
+              {/* REST DAY VIEW */}
+              {isRestDay ? (
+                <View style={styles.restDayContainer}>
+                  <Ionicons name="bed" size={32} color={theme.accentAlt} />
+                  <Text style={styles.restDayText}>Recovery & Rest Day</Text>
+                  <Text style={styles.restDaySubtext}>Take today to rest your muscles and hydrate.</Text>
+                </View>
+              ) : isCooldownActive ? (
+                /* 24-HOUR COOLDOWN ACTIVE */
                 <View style={styles.disabledButton}>
                   <Text style={styles.disabledButtonText}>Workout Complete!</Text>
-                  <Text style={styles.timerText}>Next session in {timeToMidnight}</Text>
+                  <Text style={styles.timerText}>Next session unlocks in {timeRemaining}</Text>
                 </View>
               ) : (
-                <TouchableOpacity style={styles.startButton} onPress={() => navigation.navigate('ActiveWorkout', { sessionData: todaysData.session })}>
+                /* START WORKOUT BUTTON */
+                <TouchableOpacity 
+                  style={styles.startButton} 
+                  onPress={() => navigation.navigate('ActiveWorkout', { sessionData: todaysData.session })}
+                >
                   <Text style={styles.startButtonText}>Start Workout</Text>
                   <Ionicons name="play" size={20} color={theme.background} style={{ marginLeft: 8 }} />
                 </TouchableOpacity>
@@ -283,10 +312,15 @@ const styles = StyleSheet.create({
   startButton: { flexDirection: 'row', backgroundColor: theme.accent, paddingVertical: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 25 },
   startButtonText: { color: theme.background, fontSize: 18, fontWeight: 'bold' },
   
-  // Disabled Button Styles
+  // Disabled Button & Timer Styles
   disabledButton: { backgroundColor: '#333', paddingVertical: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 25 },
   disabledButtonText: { color: theme.textSecondary, fontSize: 16, fontWeight: 'bold' },
   timerText: { color: theme.accentAlt, fontSize: 14, marginTop: 4, fontWeight: '600' },
+
+  // Rest Day Display Styles
+  restDayContainer: { alignItems: 'center', paddingVertical: 20, marginTop: 10 },
+  restDayText: { color: theme.accentAlt, fontSize: 18, fontWeight: 'bold', marginTop: 8 },
+  restDaySubtext: { color: theme.textSecondary, fontSize: 14, textAlign: 'center', marginTop: 4 },
   
   generateButton: { flexDirection: 'row', backgroundColor: theme.accentAlt, paddingVertical: 16, paddingHorizontal: 30, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 25 },
   generateButtonText: { color: theme.background, fontSize: 18, fontWeight: 'bold' },
