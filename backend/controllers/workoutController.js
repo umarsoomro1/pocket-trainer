@@ -1,7 +1,7 @@
 const WorkoutPlan = require('../models/WorkoutPlan');
 const User = require('../models/User');
 const { generateWorkoutPlan } = require('../services/aiService');
-const { getExerciseGif } = require('../services/exerciseService'); // New Import
+const { getExerciseGif } = require('../services/exerciseService');
 
 // @desc    Generate and assign a new plan to the user
 // @route   POST /api/workouts/generate
@@ -11,20 +11,21 @@ const generateAndAssignPlan = async (req, res) => {
     const user = req.user; 
     const { planType } = req.body || {}; 
 
-    // 1. Get raw JSON from AI
+    // 1. Get raw JSON from Modal Llama AI
     const generatedData = await generateWorkoutPlan(user, planType || "General");
 
     // 2. Loop through exercises and fetch GIFs from RapidAPI
-    // Step 2 in generateAndAssignPlan:
-    for (let i = 0; i < generatedData.schedule.length; i++) {
-      let day = generatedData.schedule[i];
-      if (day.exercises && day.exercises.length > 0) {
-        await Promise.all(
-          day.exercises.map(async (exercise) => {
-            const gifUrl = await getExerciseGif(exercise.name);
-            exercise.gif_url = gifUrl || null;
-          })
-        );
+    if (generatedData.schedule && Array.isArray(generatedData.schedule)) {
+      for (let i = 0; i < generatedData.schedule.length; i++) {
+        let day = generatedData.schedule[i];
+        if (day.exercises && day.exercises.length > 0) {
+          await Promise.all(
+            day.exercises.map(async (exercise) => {
+              const gifUrl = await getExerciseGif(exercise.name);
+              exercise.gif_url = gifUrl || null;
+            })
+          );
+        }
       }
     }
 
@@ -41,6 +42,7 @@ const generateAndAssignPlan = async (req, res) => {
 
     res.status(201).json({ message: "Plan generated successfully!", planId: newPlan._id });
   } catch (error) {
+    console.error("Workout Generation Error:", error);
     res.status(500).json({ message: error.message });
   }
 };
