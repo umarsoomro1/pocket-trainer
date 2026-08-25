@@ -1,5 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  FlatList,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../api/axiosConfig';
 import { theme } from '../theme';
@@ -9,20 +19,20 @@ const ChatScreen = () => {
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const flatListRef = useRef(null);
 
   useEffect(() => {
     const fetchHistory = async () => {
       try {
         const response = await api.get('/chat');
-        // Map DB schema to frontend state
-        const formattedHistory = response.data.map(msg => ({
+        const formattedHistory = response.data.map((msg) => ({
           id: msg._id,
           text: msg.text,
-          isUser: msg.isUser
+          isUser: msg.isUser,
         }));
         setMessages(formattedHistory);
       } catch (error) {
-        console.log("Failed to load chat history");
+        console.log('Failed to load chat history');
       } finally {
         setLoadingHistory(false);
       }
@@ -33,20 +43,21 @@ const ChatScreen = () => {
   const sendMessage = async () => {
     if (!inputText.trim()) return;
 
-    // FIX: Unique ID for the user message
-    const userMsg = { id: Date.now().toString() + '-user', text: inputText, isUser: true };
+    const userMsg = { id: Date.now().toString() + '-user', text: inputText.trim(), isUser: true };
     setMessages((prev) => [...prev, userMsg]);
+    const promptToSend = inputText.trim();
     setInputText('');
     setIsTyping(true);
 
     try {
-      const response = await api.post('/chat', { message: userMsg.text });
-      // FIX: Unique ID for the AI message
+      const response = await api.post('/chat', { message: promptToSend });
       const aiMsg = { id: Date.now().toString() + '-ai', text: response.data.reply, isUser: false };
       setMessages((prev) => [...prev, aiMsg]);
     } catch (error) {
-      // FIX: Unique ID for the error message instead of the static 'err'
-      setMessages((prev) => [...prev, { id: Date.now().toString() + '-err', text: "Connection error.", isUser: false }]);
+      setMessages((prev) => [
+        ...prev,
+        { id: Date.now().toString() + '-err', text: 'Connection error with AI trainer.', isUser: false },
+      ]);
     } finally {
       setIsTyping(false);
     }
@@ -59,20 +70,32 @@ const ChatScreen = () => {
   );
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={90}
+    >
       <View style={styles.header}>
         <Text style={styles.headerTitle}>AI Pocket Trainer</Text>
       </View>
 
       {loadingHistory ? (
-        <View style={{flex: 1, justifyContent: 'center'}}><ActivityIndicator color={theme.accent} /></View>
+        <View style={{ flex: 1, justifyContent: 'center' }}>
+          <ActivityIndicator color={theme.accent} size="large" />
+        </View>
       ) : (
         <FlatList
-          data={messages.length === 0 ? [{ id: 'intro', text: 'Hello! I am your AI Trainer. How can I help today?', isUser: false }] : messages}
+          ref={flatListRef}
+          data={
+            messages.length === 0
+              ? [{ id: 'intro', text: 'Hello! I am your AI Trainer. How can I help you today?', isUser: false }]
+              : messages
+          }
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
           contentContainerStyle={styles.chatList}
           showsVerticalScrollIndicator={false}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
         />
       )}
 
@@ -84,8 +107,15 @@ const ChatScreen = () => {
       )}
 
       <View style={styles.inputContainer}>
-        <TextInput style={styles.input} placeholder="Ask for advice..." placeholderTextColor={theme.textSecondary} value={inputText} onChangeText={setInputText} multiline />
-        <TouchableOpacity style={styles.sendButton} onPress={sendMessage}>
+        <TextInput
+          style={styles.input}
+          placeholder="Ask for workout advice..."
+          placeholderTextColor={theme.textSecondary}
+          value={inputText}
+          onChangeText={setInputText}
+          multiline
+        />
+        <TouchableOpacity style={styles.sendButton} onPress={sendMessage} disabled={isTyping}>
           <Ionicons name="send" size={20} color={theme.background} />
         </TouchableOpacity>
       </View>
@@ -104,7 +134,7 @@ const styles = StyleSheet.create({
   userBubble: { alignSelf: 'flex-end', backgroundColor: theme.accent, borderBottomRightRadius: 5 },
   aiBubble: { alignSelf: 'flex-start', backgroundColor: theme.card, borderBottomLeftRadius: 5 },
   messageText: { fontSize: 16, lineHeight: 22 },
-  userText: { color: theme.background, fontWeight: '500' },
+  userText: { color: theme.background, fontWeight: '600' },
   aiText: { color: theme.textPrimary },
   inputContainer: { flexDirection: 'row', padding: 15, backgroundColor: theme.card, alignItems: 'center' },
   input: { flex: 1, backgroundColor: theme.background, color: theme.textPrimary, padding: 12, borderRadius: 20, fontSize: 16, maxHeight: 100 },

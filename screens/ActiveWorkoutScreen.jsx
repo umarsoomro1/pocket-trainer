@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import api from '../api/axiosConfig';
 import { theme } from '../theme';
-import { Image } from 'expo-image';
 
 const ActiveWorkoutScreen = ({ route, navigation }) => {
   const { sessionData } = route.params;
@@ -12,7 +12,6 @@ const ActiveWorkoutScreen = ({ route, navigation }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [imageError, setImageError] = useState(false);
   
-  // Modal State
   const [infoModalVisible, setInfoModalVisible] = useState(false);
   const [selectedExercise, setSelectedExercise] = useState(null);
 
@@ -25,9 +24,8 @@ const ActiveWorkoutScreen = ({ route, navigation }) => {
   };
 
   const openExerciseInfo = (exercise) => {
-    console.log("EXERCISE DATA:", exercise);
     setSelectedExercise(exercise);
-    setImageError(false); // Reset the error state when opening a new modal
+    setImageError(false);
     setInfoModalVisible(true);
   };
 
@@ -35,7 +33,7 @@ const ActiveWorkoutScreen = ({ route, navigation }) => {
     const hasExercises = sessionData.exercises && sessionData.exercises.length > 0;
     
     if (hasExercises && completedExercises.length === 0) {
-      return Alert.alert("Hold on", "Complete at least one exercise!");
+      return Alert.alert("Hold on", "Complete at least one exercise before saving!");
     }
 
     setIsSubmitting(true);
@@ -122,18 +120,17 @@ const ActiveWorkoutScreen = ({ route, navigation }) => {
               </TouchableOpacity>
             </View>
             
-            {/* Downloaded GIF with Error Handling */}
             {selectedExercise?.gif_url && !imageError ? (
               <Image 
                 source={{ uri: selectedExercise.gif_url }} 
                 style={styles.gifImage} 
-                resizeMode="contain"
+                contentFit="contain"
                 onError={() => setImageError(true)} 
               />
             ) : (
               <View style={styles.imagePlaceholder}>
                 <Ionicons name="image-outline" size={60} color={theme.textSecondary} />
-                <Text style={{color: theme.textSecondary, marginTop: 10}}>No Image Available</Text>
+                <Text style={{ color: theme.textSecondary, marginTop: 10 }}>No Demo Available</Text>
               </View>
             )}
 
