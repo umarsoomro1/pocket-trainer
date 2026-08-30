@@ -20,7 +20,8 @@
         "backgroundColor": "#0F0F11",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.umar.soomro_789.PocketTrainer"
+      "package": "com.umar.soomro_789.PocketTrainer",
+      "softwareKeyboardLayoutMode": "pan"
     },
     "web": {
       "favicon": "./assets/favicon.png"

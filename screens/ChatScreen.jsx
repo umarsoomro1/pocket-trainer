@@ -9,7 +9,10 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../api/axiosConfig';
 import { theme } from '../theme';
@@ -70,71 +73,76 @@ const ChatScreen = () => {
   );
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={90}
-    >
-      {/* Header with Icon and Compact Layout */}
-      <View style={styles.header}>
-        <Ionicons name="fitness" size={24} color={theme.accent} style={{ marginRight: 8 }} />
-        <Text style={styles.headerTitle}>AI Pocket Trainer</Text>
-      </View>
-
-      {loadingHistory ? (
-        <View style={{ flex: 1, justifyContent: 'center' }}>
-          <ActivityIndicator color={theme.accent} size="large" />
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Ionicons name="fitness" size={24} color={theme.accent} style={{ marginRight: 8 }} />
+          <Text style={styles.headerTitle}>AI Pocket Trainer</Text>
         </View>
-      ) : (
-        <FlatList
-          ref={flatListRef}
-          data={
-            messages.length === 0
-              ? [{ id: 'intro', text: 'Hello! I am your AI Trainer. How can I help you today?', isUser: false }]
-              : messages
-          }
-          keyExtractor={(item) => item.id}
-          renderItem={renderMessage}
-          contentContainerStyle={styles.chatList}
-          showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-        />
-      )}
 
-      {isTyping && (
-        <View style={styles.typingIndicator}>
-          <ActivityIndicator size="small" color={theme.accent} />
-          <Text style={styles.typingText}>Trainer is typing...</Text>
+        {loadingHistory ? (
+          <View style={{ flex: 1, justifyContent: 'center' }}>
+            <ActivityIndicator color={theme.accent} size="large" />
+          </View>
+        ) : (
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <FlatList
+              ref={flatListRef}
+              data={
+                messages.length === 0
+                  ? [{ id: 'intro', text: 'Hello! I am your AI Trainer. How can I help you today?', isUser: false }]
+                  : messages
+              }
+              keyExtractor={(item) => item.id}
+              renderItem={renderMessage}
+              contentContainerStyle={styles.chatList}
+              showsVerticalScrollIndicator={false}
+              onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+            />
+          </TouchableWithoutFeedback>
+        )}
+
+        {isTyping && (
+          <View style={styles.typingIndicator}>
+            <ActivityIndicator size="small" color={theme.accent} />
+            <Text style={styles.typingText}>Trainer is typing...</Text>
+          </View>
+        )}
+
+        {/* Input Bar pinned right above the keyboard */}
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            placeholder="Ask for workout advice..."
+            placeholderTextColor={theme.textSecondary}
+            value={inputText}
+            onChangeText={setInputText}
+            multiline
+          />
+          <TouchableOpacity style={styles.sendButton} onPress={sendMessage} disabled={isTyping}>
+            <Ionicons name="send" size={20} color={theme.background} />
+          </TouchableOpacity>
         </View>
-      )}
-
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder="Ask for workout advice..."
-          placeholderTextColor={theme.textSecondary}
-          value={inputText}
-          onChangeText={setInputText}
-          multiline
-        />
-        <TouchableOpacity style={styles.sendButton} onPress={sendMessage} disabled={isTyping}>
-          <Ionicons name="send" size={20} color={theme.background} />
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 export default ChatScreen;
 
 const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: theme.background },
   container: { flex: 1, backgroundColor: theme.background },
   header: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 50,
-    paddingBottom: 15,
+    paddingVertical: 14,
     backgroundColor: theme.card,
     borderBottomWidth: 1,
     borderBottomColor: theme.shadow,
@@ -144,16 +152,38 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: theme.accent,
   },
-  chatList: { padding: 20, paddingBottom: 10 },
+  chatList: { padding: 20, paddingBottom: 10, flexGrow: 1 },
   messageBubble: { maxWidth: '80%', padding: 15, borderRadius: 20, marginBottom: 15 },
   userBubble: { alignSelf: 'flex-end', backgroundColor: theme.accent, borderBottomRightRadius: 5 },
   aiBubble: { alignSelf: 'flex-start', backgroundColor: theme.card, borderBottomLeftRadius: 5 },
   messageText: { fontSize: 16, lineHeight: 22 },
   userText: { color: theme.background, fontWeight: '600' },
   aiText: { color: theme.textPrimary },
-  inputContainer: { flexDirection: 'row', padding: 15, backgroundColor: theme.card, alignItems: 'center' },
-  input: { flex: 1, backgroundColor: theme.background, color: theme.textPrimary, padding: 12, borderRadius: 20, fontSize: 16, maxHeight: 100 },
-  sendButton: { backgroundColor: theme.accent, padding: 12, borderRadius: 25, marginLeft: 10, justifyContent: 'center', alignItems: 'center' },
+  inputContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    backgroundColor: theme.card,
+    alignItems: 'center',
+  },
+  input: {
+    flex: 1,
+    backgroundColor: theme.background,
+    color: theme.textPrimary,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    fontSize: 16,
+    maxHeight: 100,
+  },
+  sendButton: {
+    backgroundColor: theme.accent,
+    padding: 12,
+    borderRadius: 25,
+    marginLeft: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   typingIndicator: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 10 },
   typingText: { color: theme.textSecondary, marginLeft: 8, fontStyle: 'italic' },
 });

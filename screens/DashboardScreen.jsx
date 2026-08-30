@@ -14,6 +14,7 @@ const DashboardScreen = ({ navigation }) => {
   const [progressStats, setProgressStats] = useState(null);
   const [chartData, setChartData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isAdvancingRest, setIsAdvancingRest] = useState(false);
 
   // Generation Modal States
   const [modalVisible, setModalVisible] = useState(false);
@@ -59,18 +60,22 @@ const DashboardScreen = ({ navigation }) => {
     }, [])
   );
 
-  // Check if today is designated as a Rest Day
-  const isRestDay = 
+  // Check if today is designated as a Rest / Recovery Day
+  const isRestDay = Boolean(
     todaysData?.session?.isRestDay || 
+    todaysData?.session?.type?.toLowerCase().includes('recovery') ||
+    todaysData?.session?.type?.toLowerCase().includes('rest') ||
     todaysData?.session?.title?.toLowerCase().includes('rest') ||
+    todaysData?.session?.title?.toLowerCase().includes('recovery') ||
     !todaysData?.session?.exercises ||
-    todaysData?.session?.exercises.length === 0;
+    todaysData?.session?.exercises.length === 0
+  );
 
-  // 24-Hour Cooldown Timer Logic
+  // 24-Hour Cooldown Timer Logic (Strictly for Workout Days)
   useEffect(() => {
-    // Skip cooldown timer immediately if it is a rest day
     if (isRestDay || !todaysData?.lastWorkoutDate) {
       setIsCooldownActive(false);
+      setTimeRemaining('');
       return;
     }
 
@@ -110,6 +115,20 @@ const DashboardScreen = ({ navigation }) => {
     }
   };
 
+  // Instant Rest Day advancement without blocking
+  const handleLogRestDay = async () => {
+    setIsAdvancingRest(true);
+    try {
+      await api.post('/workouts/complete');
+      Alert.alert("Recovery Logged", "Rest day completed. You are ready for your next session!");
+      fetchDashboard();
+    } catch (error) {
+      Alert.alert("Error", "Could not advance past rest day.");
+    } finally {
+      setIsAdvancingRest(false);
+    }
+  };
+
   if (loading && !isGenerating) {
     return (
       <View style={[styles.container, styles.centered]}>
@@ -119,7 +138,7 @@ const DashboardScreen = ({ navigation }) => {
   }
 
   return (
-    <View style={{flex: 1, backgroundColor: theme.background}}>
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
       <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         <View style={styles.headerContainer}>
           <Text style={styles.headerTitle}>Overview</Text>
@@ -172,7 +191,7 @@ const DashboardScreen = ({ navigation }) => {
         </View>
 
         {chartData && (
-          <View style={{marginBottom: 30}}>
+          <View style={{ marginBottom: 30 }}>
             <Text style={styles.sectionHeader}>Weight Progress (lbs)</Text>
             <LineChart
               data={chartData}
@@ -202,12 +221,27 @@ const DashboardScreen = ({ navigation }) => {
               <View style={styles.divider} />
               <Text style={styles.sessionTitle}>{todaysData.session.title}</Text>
               
-              {/* REST DAY VIEW */}
+              {/* REST DAY VIEW WITH ADVANCE BUTTON */}
               {isRestDay ? (
                 <View style={styles.restDayContainer}>
-                  <Ionicons name="bed" size={32} color={theme.accentAlt} />
+                  <Ionicons name="bed" size={36} color={theme.accentAlt} />
                   <Text style={styles.restDayText}>Recovery & Rest Day</Text>
-                  <Text style={styles.restDaySubtext}>Take today to rest your muscles and hydrate.</Text>
+                  <Text style={styles.restDaySubtext}>Take today to rest your muscles and hydrate properly.</Text>
+                  
+                  <TouchableOpacity 
+                    style={styles.restAdvanceButton} 
+                    onPress={handleLogRestDay} 
+                    disabled={isAdvancingRest}
+                  >
+                    {isAdvancingRest ? (
+                      <ActivityIndicator color={theme.background} />
+                    ) : (
+                      <>
+                        <Text style={styles.restAdvanceButtonText}>Log Rest Day & Advance</Text>
+                        <Ionicons name="checkmark-done" size={20} color={theme.background} style={{ marginLeft: 8 }} />
+                      </>
+                    )}
+                  </TouchableOpacity>
                 </View>
               ) : isCooldownActive ? (
                 /* 24-HOUR COOLDOWN ACTIVE */
@@ -244,10 +278,10 @@ const DashboardScreen = ({ navigation }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             {isGenerating ? (
-              <View style={{alignItems: 'center', paddingVertical: 40}}>
+              <View style={{ alignItems: 'center', paddingVertical: 40 }}>
                 <ActivityIndicator size="large" color={theme.accent} />
-                <Text style={{color: theme.textPrimary, fontSize: 18, marginTop: 20, fontWeight: 'bold'}}>Building your plan...</Text>
-                <Text style={{color: theme.textSecondary, marginTop: 10, textAlign: 'center'}}>The AI is structuring your sets and reps. This takes a few seconds.</Text>
+                <Text style={{ color: theme.textPrimary, fontSize: 18, marginTop: 20, fontWeight: 'bold' }}>Building your plan...</Text>
+                <Text style={{ color: theme.textSecondary, marginTop: 10, textAlign: 'center' }}>The AI is structuring your sets and reps. This takes a few seconds.</Text>
               </View>
             ) : (
               <>
@@ -313,14 +347,16 @@ const styles = StyleSheet.create({
   startButtonText: { color: theme.background, fontSize: 18, fontWeight: 'bold' },
   
   // Disabled Button & Timer Styles
-  disabledButton: { backgroundColor: '#333', paddingVertical: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 25 },
+  disabledButton: { backgroundColor: '#333', paddingVertical: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 25 },
   disabledButtonText: { color: theme.textSecondary, fontSize: 16, fontWeight: 'bold' },
   timerText: { color: theme.accentAlt, fontSize: 14, marginTop: 4, fontWeight: '600' },
 
   // Rest Day Display Styles
-  restDayContainer: { alignItems: 'center', paddingVertical: 20, marginTop: 10 },
+  restDayContainer: { alignItems: 'center', paddingVertical: 16, marginTop: 5 },
   restDayText: { color: theme.accentAlt, fontSize: 18, fontWeight: 'bold', marginTop: 8 },
-  restDaySubtext: { color: theme.textSecondary, fontSize: 14, textAlign: 'center', marginTop: 4 },
+  restDaySubtext: { color: theme.textSecondary, fontSize: 14, textAlign: 'center', marginTop: 4, marginBottom: 15 },
+  restAdvanceButton: { flexDirection: 'row', backgroundColor: theme.accentAlt, paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', width: '100%' },
+  restAdvanceButtonText: { color: theme.background, fontSize: 16, fontWeight: 'bold' },
   
   generateButton: { flexDirection: 'row', backgroundColor: theme.accentAlt, paddingVertical: 16, paddingHorizontal: 30, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 25 },
   generateButtonText: { color: theme.background, fontSize: 18, fontWeight: 'bold' },

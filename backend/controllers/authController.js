@@ -1,163 +1,71 @@
-const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 
-// Generate JWT
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' });
-};
-
-// @desc    Register new user & collect biometrics
-// @route   POST /api/auth/register
-const registerUser = async (req, res) => {
+// 1. Request Password Reset (Generates & Stores Hashed OTP/Token)
+// POST /api/auth/forgot-password
+exports.forgotPassword = async (req, res) => {
   try {
-    const { email, password, dob, weight, goal } = req.body;
+    const { email } = req.body;
+    const user = await User.findOne({ email: email?.toLowerCase() });
 
-    // 1. Check if user exists
-    const userExists = await User.findOne({ email });
-    if (userExists) return res.status(400).json({ message: 'User already exists' });
-
-    // 2. Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    // 3. Create user
-    const user = await User.create({
-      email,
-      password: hashedPassword,
-      dob,
-      weight,
-      goal,
-      weightHistory: [{ weight, date: new Date() }] // Log initial weight
-    });
-
-    if (user) {
-      res.status(201).json({
-        _id: user.id,
-        email: user.email,
-        token: generateToken(user._id)
-      });
-    } else {
-      res.status(400).json({ message: 'Invalid user data' });
+    if (!user) {
+      // Return 200 to prevent email enumeration attacks
+      return res.status(200).json({ message: "If that email is registered, a reset code was sent." });
     }
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
 
-// @desc    Authenticate a user & get JWT
-// @route   POST /api/auth/login
-const loginUser = async (req, res) => {
-  try {
-    const { email, password } = req.body;
+    // Generate 6-digit OTP (or a random 32-byte hex token)
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // 1. Check if user exists in the database
-    const user = await User.findOne({ email });
-
-    // 2. Compare the plain text password with the hashed password in the DB
-    if (user && (await bcrypt.compare(password, user.password))) {
-      res.status(200).json({
-        _id: user.id,
-        email: user.email,
-        token: generateToken(user._id)
-      });
-    } else {
-      res.status(401).json({ message: 'Invalid email or password' });
-    }
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// @desc    Get user profile data
-// @route   GET /api/auth/profile
-// @access  Private
-const getUserProfile = async (req, res) => {
-  try {
-    const user = req.user; 
-    
-    if (user) {
-      res.status(200).json({
-        email: user.email,
-        dob: user.dob,
-        weight: user.weight,
-        goal: user.goal
-      });
-    } else {
-      res.status(404).json({ message: 'User not found' });
-    }
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// @desc    Update user biometrics/profile
-// @route   PUT /api/auth/profile
-// @access  Private
-const updateProfile = async (req, res) => {
-  try {
-    const user = req.user;
-    const { weight, goal, dob } = req.body;
-
-    if (weight && weight !== user.weight) {
-      user.weight = weight;
-      user.weightHistory.push({ weight: parseFloat(weight), date: new Date() });
-    }
-    if (goal) user.goal = goal;
-    if (dob) user.dob = dob;
-
+    // Hash the code before saving to DB
+    const hashedCode = crypto.createHash('sha256').update(resetCode).digest('hex');
+    user.resetPasswordToken = hashedCode;
+    user.resetPasswordExpires = Date.now() + 15 * 60 * 1000; // 15 Minutes
     await user.save();
 
-    res.status(200).json({
-      message: "Profile updated successfully",
-      weight: user.weight,
-      goal: user.goal,
-      dob: user.dob
-    });
+    // TODO: Send email via Nodemailer / Resend
+    // await sendEmail({ to: user.email, subject: "Your Reset Code", text: `Your code is ${resetCode}` });
+    console.log(`[DEV ONLY] Password Reset OTP for ${user.email}: ${resetCode}`);
+
+    res.status(200).json({ message: "Reset code sent to your email." });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Change password (Inside app)
-// @route   PUT /api/auth/password
-// @access  Private
-const updatePassword = async (req, res) => {
+// 2. Verify Token & Reset Password
+// POST /api/auth/reset-password
+exports.resetPassword = async (req, res) => {
   try {
-    const user = req.user;
-    const { currentPassword, newPassword } = req.body;
+    const { email, code, newPassword } = req.body;
 
-    if (user && (await bcrypt.compare(currentPassword, user.password))) {
-      const salt = await bcrypt.genSalt(10);
-      user.password = await bcrypt.hash(newPassword, salt);
-      await user.save();
-      res.status(200).json({ message: "Password updated successfully" });
-    } else {
-      res.status(401).json({ message: "Incorrect current password" });
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({ message: "All fields are required." });
     }
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
 
-// @desc    Prototype: Reset password (Login screen)
-// @route   POST /api/auth/reset-password
-// @access  Public
-const resetPassword = async (req, res) => {
-  try {
-    const { email, newPassword } = req.body;
-    const user = await User.findOne({ email });
+    const hashedCode = crypto.createHash('sha256').update(code.trim()).digest('hex');
 
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const user = await User.findOne({
+      email: email.toLowerCase(),
+      resetPasswordToken: hashedCode,
+      resetPasswordExpires: { $gt: Date.now() } // Token must not be expired
+    });
 
+    if (!user) {
+      return res.status(400).json({ message: "Invalid or expired reset code." });
+    }
+
+    // Hash new password
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(newPassword, salt);
+
+    // Clear reset token fields
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
     await user.save();
 
-    res.status(200).json({ message: "Password reset successful. You can now log in." });
+    res.status(200).json({ message: "Password updated successfully. You can now login." });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
-
-module.exports = { registerUser, loginUser, getUserProfile, updateProfile, updatePassword, resetPassword };

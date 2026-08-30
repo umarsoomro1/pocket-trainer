@@ -30,10 +30,12 @@ const appTheme = {
   },
 };
 
+// In navigation/AppNavigation.jsx:
 const MainTabs = () => (
   <Tab.Navigator
     screenOptions={{
       headerShown: false,
+      tabBarHideOnKeyboard: true, // <-- Prevents tab bar from jumping up over keyboard
       tabBarStyle: {
         backgroundColor: '#1E1E1E',
         borderTopColor: '#00FF7F44',

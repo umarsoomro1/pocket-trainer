@@ -35,7 +35,7 @@ const AboutScreen = ({ navigation }) => {
           <View style={styles.creditInfo}>
             <Text style={styles.creditLabel}>Lead Developer</Text>
             <Text style={styles.creditName}>Muhammad Umar Soomro</Text>
-            <Text style={styles.creditRole}>Computer Engineering Student</Text>
+            <Text style={styles.creditRole}>Computer Engineer</Text>
           </View>
         </View>
 
