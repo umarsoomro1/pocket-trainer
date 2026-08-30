@@ -75,7 +75,9 @@ const ChatScreen = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={90}
     >
+      {/* Header with Icon and Compact Layout */}
       <View style={styles.header}>
+        <Ionicons name="fitness" size={24} color={theme.accent} style={{ marginRight: 8 }} />
         <Text style={styles.headerTitle}>AI Pocket Trainer</Text>
       </View>
 
@@ -127,8 +129,21 @@ export default ChatScreen;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.background },
-  header: { paddingTop: 60, paddingBottom: 20, backgroundColor: theme.card, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: theme.shadow },
-  headerTitle: { fontSize: 20, fontWeight: 'bold', color: theme.accent },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 50,
+    paddingBottom: 15,
+    backgroundColor: theme.card,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.shadow,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: theme.accent,
+  },
   chatList: { padding: 20, paddingBottom: 10 },
   messageBubble: { maxWidth: '80%', padding: 15, borderRadius: 20, marginBottom: 15 },
   userBubble: { alignSelf: 'flex-end', backgroundColor: theme.accent, borderBottomRightRadius: 5 },
@@ -140,5 +155,5 @@ const styles = StyleSheet.create({
   input: { flex: 1, backgroundColor: theme.background, color: theme.textPrimary, padding: 12, borderRadius: 20, fontSize: 16, maxHeight: 100 },
   sendButton: { backgroundColor: theme.accent, padding: 12, borderRadius: 25, marginLeft: 10, justifyContent: 'center', alignItems: 'center' },
   typingIndicator: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 10 },
-  typingText: { color: theme.textSecondary, marginLeft: 8, fontStyle: 'italic' }
+  typingText: { color: theme.textSecondary, marginLeft: 8, fontStyle: 'italic' },
 });

@@ -2,7 +2,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Live Vercel backend URL
-const API_BASE_URL = 'https://pocket-trainer-six.vercel.app/api';
+const API_BASE_URL = 'https://pocket-trainer-eight.vercel.app/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,

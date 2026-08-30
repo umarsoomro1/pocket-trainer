@@ -1,7 +1,7 @@
 import React, { useContext } from 'react';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, View } from 'react-native';
@@ -12,14 +12,13 @@ import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import ChatScreen from '../screens/ChatScreen';
-
-// We will create these two files in the next step
 import ActiveWorkoutScreen from '../screens/ActiveWorkoutScreen';
 import ProgressSummaryScreen from '../screens/ProgressSummaryScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import AboutScreen from '../screens/AboutScreen';
 
 const Tab = createBottomTabNavigator();
-const Stack = createStackNavigator();
+const Stack = createNativeStackNavigator();
 
 const appTheme = {
   ...DefaultTheme,
@@ -31,7 +30,6 @@ const appTheme = {
   },
 };
 
-// 1. The Bottom Tabs
 const MainTabs = () => (
   <Tab.Navigator
     screenOptions={{
@@ -65,16 +63,15 @@ const MainTabs = () => (
   </Tab.Navigator>
 );
 
-// 2. The Master App Stack (Wraps Tabs + Full Screen Workouts)
 const AppStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
     <Stack.Screen name="MainTabs" component={MainTabs} />
     <Stack.Screen name="ActiveWorkout" component={ActiveWorkoutScreen} />
     <Stack.Screen name="ProgressSummary" component={ProgressSummaryScreen} />
+    <Stack.Screen name="About" component={AboutScreen} />
   </Stack.Navigator>
 );
 
-// 3. The Auth Stack
 const AuthStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
     <Stack.Screen name="Login" component={LoginScreen} />

@@ -6,12 +6,12 @@ import { AuthContext } from '../context/AuthContext';
 import api from '../api/axiosConfig';
 import { theme } from '../theme';
 
-const ProfileScreen = () => {
+const ProfileScreen = ({ navigation }) => {
   const { logout } = useContext(AuthContext);
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Modal States
+  // Edit Modal States
   const [modalVisible, setModalVisible] = useState(false);
   const [editType, setEditType] = useState(''); // 'weight', 'goal', 'password', 'dob'
   const [inputValue, setInputValue] = useState('');
@@ -144,6 +144,14 @@ const ProfileScreen = () => {
             <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
           </TouchableOpacity>
           <View style={styles.divider} />
+
+          {/* Navigate to Dedicated About Screen */}
+          <TouchableOpacity style={styles.settingsRow} onPress={() => navigation.navigate('About')}>
+            <Ionicons name="information-circle-outline" size={24} color={theme.accentAlt} />
+            <Text style={[styles.settingsText, { color: theme.accentAlt }]}>About</Text>
+            <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+          </TouchableOpacity>
+          <View style={styles.divider} />
           
           <TouchableOpacity style={styles.settingsRow} onPress={logout}>
             <Ionicons name="log-out-outline" size={24} color="#FF4C4C" />
@@ -214,8 +222,6 @@ const styles = StyleSheet.create({
   settingsRow: { flexDirection: 'row', alignItems: 'center', padding: 15 },
   settingsText: { flex: 1, fontSize: 16, color: theme.textPrimary, marginLeft: 15, fontWeight: '500' },
   divider: { height: 1, backgroundColor: '#333333', marginVertical: 5 },
-  
-  // Modal Styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
   modalView: { width: '85%', backgroundColor: theme.card, borderRadius: 20, padding: 25, elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4 },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: theme.textPrimary, marginBottom: 20, textAlign: 'center' },
