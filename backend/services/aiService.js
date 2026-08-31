@@ -55,9 +55,7 @@ Do not write explanations, greetings, or markdown fences outside the JSON.`;
   }
 };
 
-/**
- * Conversational Chat -> Handles natural conversation AND structured routine modifications
- */
+
 const generateChatResponse = async (message, user, currentPlan = null) => {
   try {
     const age = user.dob
