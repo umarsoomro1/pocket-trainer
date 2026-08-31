@@ -11,13 +11,22 @@ const LoginScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
   const { login } = useContext(AuthContext);
 
-  // Secure Reset Modal States
+  // Secure Multi-Step Reset Modal States
   const [modalVisible, setModalVisible] = useState(false);
+  const [step, setStep] = useState(1); // 1: Email, 2: Code, 3: Password + Confirm Password
   const [resetEmail, setResetEmail] = useState('');
   const [resetCode, setResetCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [step, setStep] = useState(1); // Step 1: Request code, Step 2: Enter code & new password
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
+
+  const resetModalState = () => {
+    setModalVisible(false);
+    setStep(1);
+    setResetCode('');
+    setNewPassword('');
+    setConfirmPassword('');
+  };
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -34,40 +43,55 @@ const LoginScreen = ({ navigation }) => {
     }
   };
 
+  // Step 1: Send 6-Digit Code
   const handleSendCode = async () => {
-    if (!resetEmail) {
-      return Alert.alert("Required", "Please enter your email.");
+    if (!resetEmail.trim()) {
+      return Alert.alert("Required", "Please enter your email address.");
     }
     setResetLoading(true);
     try {
-      await api.post('/auth/forgot-password', { email: resetEmail });
-      Alert.alert("Code Sent", "Check your email for the 6-digit verification code.");
+      await api.post('/auth/forgot-password', { email: resetEmail.trim() });
+      Alert.alert("Code Sent", "Please check your server logs or email for the 6-digit code.");
       setStep(2);
     } catch (error) {
-      Alert.alert("Error", error.response?.data?.message || "Failed to send code.");
+      Alert.alert("Error", error.response?.data?.message || "Failed to send reset code.");
     } finally {
       setResetLoading(false);
     }
   };
 
-  const handleVerifyAndReset = async () => {
-    if (!resetCode || !newPassword) {
-      return Alert.alert("Required", "Please fill in both the code and new password.");
+  // Step 2: Validate Code format and advance
+  const handleVerifyCodeStep = () => {
+    if (!resetCode.trim() || resetCode.trim().length !== 6) {
+      return Alert.alert("Invalid Code", "Please enter the complete 6-digit verification code.");
     }
+    setStep(3);
+  };
+
+  // Step 3: Verify Password Match & Submit to Backend
+  const handleResetPassword = async () => {
+    if (!newPassword || !confirmPassword) {
+      return Alert.alert("Required", "Please fill in both password fields.");
+    }
+    if (newPassword.length < 6) {
+      return Alert.alert("Weak Password", "Password must be at least 6 characters long.");
+    }
+    if (newPassword !== confirmPassword) {
+      return Alert.alert("Mismatch", "New password and confirm password do not match.");
+    }
+
     setResetLoading(true);
     try {
       await api.post('/auth/reset-password', {
-        email: resetEmail,
-        code: resetCode,
+        email: resetEmail.trim(),
+        code: resetCode.trim(),
         newPassword
       });
       Alert.alert("Success", "Your password has been reset securely. You can now login.");
-      setModalVisible(false);
-      setStep(1);
-      setResetCode('');
-      setNewPassword('');
+      resetModalState();
     } catch (error) {
-      Alert.alert("Reset Failed", error.response?.data?.message || "Invalid or expired code.");
+      Alert.alert("Reset Failed", error.response?.data?.message || "Invalid or expired reset code.");
+      setStep(2); // Send back to code step if invalid
     } finally {
       setResetLoading(false);
     }
@@ -108,20 +132,25 @@ const LoginScreen = ({ navigation }) => {
         <Text style={styles.linkText}>Don't have an account? <Text style={styles.linkHighlight}>Register</Text></Text>
       </TouchableOpacity>
 
-      {/* SECURE RESET PASSWORD MODAL */}
+      {/* 3-STEP SECURE RESET PASSWORD MODAL */}
       <Modal animationType="fade" transparent={true} visible={modalVisible}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalView}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{step === 1 ? "Forgot Password" : "Enter Verification Code"}</Text>
-              <TouchableOpacity onPress={() => { setModalVisible(false); setStep(1); }}>
+              <Text style={styles.modalTitle}>
+                {step === 1 && "Forgot Password"}
+                {step === 2 && "Enter Verification Code"}
+                {step === 3 && "Set New Password"}
+              </Text>
+              <TouchableOpacity onPress={resetModalState}>
                 <Ionicons name="close-circle" size={26} color={theme.textSecondary} />
               </TouchableOpacity>
             </View>
 
-            {step === 1 ? (
+            {/* STEP 1: Enter Email */}
+            {step === 1 && (
               <>
-                <Text style={styles.modalSubText}>Enter your account email to receive a secure 6-digit reset code.</Text>
+                <Text style={styles.modalSubText}>Enter your account email to receive a 6-digit verification code.</Text>
                 <TextInput
                   style={styles.input}
                   placeholder="Your Email Address"
@@ -135,17 +164,34 @@ const LoginScreen = ({ navigation }) => {
                   {resetLoading ? <ActivityIndicator color={theme.background} /> : <Text style={styles.buttonText}>Send Code</Text>}
                 </TouchableOpacity>
               </>
-            ) : (
+            )}
+
+            {/* STEP 2: Enter 6-Digit Code */}
+            {step === 2 && (
               <>
-                <Text style={styles.modalSubText}>Enter the code sent to {resetEmail} and your new password.</Text>
+                <Text style={styles.modalSubText}>Enter the 6-digit code sent for {resetEmail}.</Text>
                 <TextInput
-                  style={styles.input}
-                  placeholder="6-Digit Code"
+                  style={[styles.input, styles.codeInput]}
+                  placeholder="000000"
                   placeholderTextColor={theme.textSecondary}
                   keyboardType="numeric"
+                  maxLength={6}
                   value={resetCode}
                   onChangeText={setResetCode}
                 />
+                <TouchableOpacity style={styles.primaryButton} onPress={handleVerifyCodeStep}>
+                  <Text style={styles.buttonText}>Continue</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setStep(1)} style={{ marginTop: 10, alignItems: 'center' }}>
+                  <Text style={styles.backStepText}>← Change Email</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {/* STEP 3: New Password & Confirm Password */}
+            {step === 3 && (
+              <>
+                <Text style={styles.modalSubText}>Create a new password for your account.</Text>
                 <TextInput
                   style={styles.input}
                   placeholder="New Password"
@@ -154,8 +200,19 @@ const LoginScreen = ({ navigation }) => {
                   value={newPassword}
                   onChangeText={setNewPassword}
                 />
-                <TouchableOpacity style={styles.primaryButton} onPress={handleVerifyAndReset} disabled={resetLoading}>
-                  {resetLoading ? <ActivityIndicator color={theme.background} /> : <Text style={styles.buttonText}>Reset Password</Text>}
+                <TextInput
+                  style={styles.input}
+                  placeholder="Confirm New Password"
+                  placeholderTextColor={theme.textSecondary}
+                  secureTextEntry
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                />
+                <TouchableOpacity style={styles.primaryButton} onPress={handleResetPassword} disabled={resetLoading}>
+                  {resetLoading ? <ActivityIndicator color={theme.background} /> : <Text style={styles.buttonText}>Update Password</Text>}
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setStep(2)} style={{ marginTop: 10, alignItems: 'center' }}>
+                  <Text style={styles.backStepText}>← Back to Code</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -173,10 +230,12 @@ const styles = StyleSheet.create({
   header: { fontSize: 36, fontWeight: 'bold', color: theme.accent, textAlign: 'center', marginBottom: 5 },
   subHeader: { fontSize: 18, color: theme.textSecondary, textAlign: 'center', marginBottom: 40 },
   input: { borderWidth: 1, borderColor: theme.shadow, backgroundColor: theme.card, borderRadius: 10, padding: 15, color: theme.textPrimary, marginBottom: 15, fontSize: 16 },
-  primaryButton: { backgroundColor: theme.accent, padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 10, marginBottom: 20 },
+  codeInput: { textAlign: 'center', letterSpacing: 8, fontSize: 24, fontWeight: 'bold' },
+  primaryButton: { backgroundColor: theme.accent, padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 10, marginBottom: 15 },
   buttonText: { color: theme.background, fontSize: 18, fontWeight: 'bold' },
   linkText: { color: theme.textSecondary, textAlign: 'center', fontSize: 14 },
   linkHighlight: { color: theme.accent, fontWeight: 'bold' },
+  backStepText: { color: theme.textSecondary, fontSize: 14, fontWeight: '500' },
 
   // Modal Styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center' },
