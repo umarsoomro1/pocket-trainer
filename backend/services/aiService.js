@@ -56,40 +56,81 @@ Do not write explanations, greetings, or markdown fences outside the JSON.`;
 };
 
 /**
- * Conversational Chat -> Grounded in sports science, anatomical accuracy, and conversational coaching
+ * Conversational Chat -> Handles natural conversation AND structured routine modifications
  */
-const generateChatResponse = async (message, user, context = '') => {
+const generateChatResponse = async (message, user, currentPlan = null) => {
   try {
     const age = user.dob
       ? Math.abs(new Date(Date.now() - new Date(user.dob).getTime()).getUTCFullYear() - 1970)
       : 25;
 
-    const prompt = `User Stats: Age ${age}, Weight ${user.weight || 150}lbs, Goal: ${user.goal || 'Hypertrophy'}. ${context}\nUser Question: "${message}"`;
-    
-    const system_prompt = `You are Pocket Trainer, an elite certified strength and conditioning specialist (CSCS) and sports nutritionist.
+    let activePlanContext = "No active routine loaded.";
+    if (currentPlan) {
+      activePlanContext = `Active Plan Title: "${currentPlan.title}". Current Day Index: ${user.current_day_index}. Full Schedule: ${JSON.stringify(currentPlan.schedule)}`;
+    }
 
-Follow these strict kinesiology and exercise science rules:
-1. ANATOMICAL ACCURACY:
-   - Chest (Push): Horizontal pressing and flyes (Flat/Incline Bench Press, Dips, Chest Flyes). NEVER include Overhead Shoulder Press on Chest day.
-   - Back (Pull): Vertical/horizontal pulling and hip hinges (Deadlifts, Lat Pulldowns, Bent-over Rows, Face Pulls).
-   - Shoulders: Overhead pressing (OHP/Arnold Press), Lateral Raises, Rear Delt Flyes.
-   - Arms: Strictly Biceps (curls) and Triceps (pushdowns, skull crushers). NEVER include Overhead Shoulder Press on Arm day.
-   - Legs: Squats, Leg Press, Romanian Deadlifts (RDLs), Hamstring Curls, Leg Extensions, Calf Raises.
-2. SPLIT INTEGRITY & VOLUME:
-   - "Push / Pull / Legs (PPL)": Only Push (Chest/Shoulders/Triceps), Pull (Back/Rear Delts/Biceps), and Legs (Quads/Hamstrings/Calves).
-   - "Single Muscle / Bro Split": Provide 3 to 5 distinct exercises per muscle group to ensure adequate hypertrophy volume.
-3. CONVERSATIONAL TONE:
-   - Provide accurate, motivating, direct, and medically sound advice.
-   - Format workout suggestions in clean bullet points.
-   - NEVER output raw JSON syntax or curly brackets in chat unless explicitly asked for code.`;
+    const prompt = `User Stats: Age ${age}, Weight ${user.weight || 150}lbs, Goal: ${user.goal || 'Hypertrophy'}.\nActive Workout Context: ${activePlanContext}\nUser Message: "${message}"`;
+    
+    const system_prompt = `You are Pocket Trainer, an elite certified strength coach and sports nutritionist.
+You handle both standard fitness conversations AND modifications to the user's active workout plan.
+
+OUTPUT FORMAT REQUIREMENTS:
+You MUST respond with a valid JSON object matching one of these two structures:
+
+1. FOR GENERAL QUESTIONS / NUTRITION / FORM ADVICE:
+{
+  "action": "reply_only",
+  "reply": "Your clear, motivating, and anatomically accurate response here."
+}
+
+2. FOR WORKOUT MODIFICATIONS / SPLIT ADJUSTMENTS / EXERCISE SWAPS (When the user asks to change their split, adjust volume, replace exercises, or alter days):
+{
+  "action": "update_plan",
+  "reply": "Conversational confirmation explaining what was changed and why.",
+  "updated_schedule": [
+    {
+      "title": "Day 1 - Push",
+      "type": "Strength",
+      "exercises": [
+        {
+          "name": "Barbell Bench Press",
+          "sets": 4,
+          "reps_target": "8-10",
+          "rest_seconds": 90,
+          "muscle": "Chest",
+          "benefits": "Keep core tight and elbows tucked."
+        }
+      ]
+    }
+  ]
+}
+
+STRICT KINESIOLOGY RULES:
+- Chest: Bench Press, Incline Press, Chest Flyes, Dips. NEVER put Overhead Press on chest day.
+- Back: Deadlifts, Lat Pulldowns, Rows, Face Pulls.
+- Shoulders: Overhead Press, Lateral Raises, Rear Delt Flyes.
+- Arms: Strictly Biceps and Triceps. NEVER put Overhead Press on arm day.
+- Legs: Squats, Leg Press, Romanian Deadlifts (RDLs), Hamstring Curls, Leg Extensions, Calf Raises.
+- Volume: Always provide 3-5 exercises per muscle group when requested.
+- Output ONLY the raw JSON object. Do not include markdown code fences or conversational text outside the JSON.`;
 
     const response = await axios.post(
       MODAL_AI_URL,
-      { prompt, system_prompt, max_tokens: 650, temperature: 0.3 },
-      { headers: { 'Content-Type': 'application/json' }, timeout: 45000 }
+      { prompt, system_prompt, max_tokens: 1536, temperature: 0.2 },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 60000 }
     );
 
-    return response.data.raw_json.trim();
+    const rawText = response.data.raw_json;
+    const cleanText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+    try {
+      return JSON.parse(cleanText);
+    } catch (parseErr) {
+      return {
+        action: "reply_only",
+        reply: cleanText
+      };
+    }
   } catch (error) {
     console.error("Chat AI Error:", error.response?.data || error.message);
     throw new Error("Failed to generate chat response from AI model");

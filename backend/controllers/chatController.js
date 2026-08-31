@@ -14,7 +14,7 @@ const getChatHistory = async (req, res) => {
   }
 };
 
-// @desc    Send message to AI and save to DB
+// @desc    Send message to AI, auto-apply plan modifications to DB, and save history
 // @route   POST /api/chat
 // @access  Private
 const sendChatMessage = async (req, res) => {
@@ -29,28 +29,32 @@ const sendChatMessage = async (req, res) => {
     // 1. Save user's message to MongoDB
     await ChatMessage.create({ userId: user._id, text: message.trim(), isUser: true });
 
-    // 2. Build dynamic user context (Age, Weight, Active Plan, and Day)
-    const age = user.dob
-      ? Math.abs(new Date(Date.now() - new Date(user.dob).getTime()).getUTCFullYear() - 1970)
-      : 25;
-
-    let context = `Age: ${age}, Weight: ${user.weight || 150}lbs, Goal: ${user.goal || 'General Fitness'}.`;
-
+    // 2. Fetch current active workout plan (if assigned)
+    let currentPlan = null;
     if (user.active_program_id) {
-      const plan = await WorkoutPlan.findById(user.active_program_id);
-      if (plan) {
-        context += ` Active Program: "${plan.title}" (currently on Day ${user.current_day_index} of ${plan.schedule.length}).`;
-      }
+      currentPlan = await WorkoutPlan.findById(user.active_program_id);
     }
 
-    // 3. Call your fine-tuned model via aiService
-    const aiReply = await generateChatResponse(message.trim(), user, context);
+    // 3. Call AI model with full workout context & modification capability
+    const aiResult = await generateChatResponse(message.trim(), user, currentPlan);
 
-    // 4. Save AI's response to MongoDB
-    await ChatMessage.create({ userId: user._id, text: aiReply, isUser: false });
+    const replyText = aiResult.reply || "Your request has been processed.";
 
-    // 5. Send reply back to frontend
-    res.status(200).json({ reply: aiReply });
+    // 4. If AI detected a split adjustment intent, update the WorkoutPlan in MongoDB
+    if (aiResult.action === 'update_plan' && aiResult.updated_schedule && currentPlan) {
+      currentPlan.schedule = aiResult.updated_schedule;
+      await currentPlan.save();
+      console.log(`[AI WORKOUT SYNC] Plan ${currentPlan._id} schedule updated successfully.`);
+    }
+
+    // 5. Save AI's response to Chat history
+    await ChatMessage.create({ userId: user._id, text: replyText, isUser: false });
+
+    // 6. Send reply back to frontend
+    res.status(200).json({ 
+      reply: replyText,
+      planUpdated: aiResult.action === 'update_plan'
+    });
 
   } catch (error) {
     console.error("Chat Controller Error:", error);
