@@ -1,6 +1,12 @@
 const ChatMessage = require('../models/ChatMessage');
 const WorkoutPlan = require('../models/WorkoutPlan');
-const { generateChatResponse } = require('../services/aiService');
+const { generateChatResponse, modifyWorkoutPlan } = require('../services/aiService');
+
+// Detects workout alteration intents
+const isModificationIntent = (text) => {
+  const pattern = /(change|modify|update|adjust|switch|replace|add|increase|more exercises?|fewer exercises?|split|routine|workout plan|hypertrophy|sets|reps)/i;
+  return pattern.test(text);
+};
 
 // @desc    Get user's chat history
 // @route   GET /api/chat
@@ -14,7 +20,7 @@ const getChatHistory = async (req, res) => {
   }
 };
 
-// @desc    Send message to AI, auto-apply plan modifications to DB, and save history
+// @desc    Send message to AI, auto-sync modifications to DB, and save history
 // @route   POST /api/chat
 // @access  Private
 const sendChatMessage = async (req, res) => {
@@ -26,34 +32,49 @@ const sendChatMessage = async (req, res) => {
       return res.status(400).json({ message: "Message content is required." });
     }
 
-    // 1. Save user's message to MongoDB
-    await ChatMessage.create({ userId: user._id, text: message.trim(), isUser: true });
+    const cleanMsg = message.trim();
 
-    // 2. Fetch current active workout plan (if assigned)
+    // 1. Save user's message to MongoDB
+    await ChatMessage.create({ userId: user._id, text: cleanMsg, isUser: true });
+
+    // 2. Fetch current workout plan
     let currentPlan = null;
     if (user.active_program_id) {
       currentPlan = await WorkoutPlan.findById(user.active_program_id);
     }
 
-    // 3. Call AI model with full workout context & modification capability
-    const aiResult = await generateChatResponse(message.trim(), user, currentPlan);
+    let planWasUpdated = false;
 
-    const replyText = aiResult.reply || "Your request has been processed.";
-
-    // 4. If AI detected a split adjustment intent, update the WorkoutPlan in MongoDB
-    if (aiResult.action === 'update_plan' && aiResult.updated_schedule && currentPlan) {
-      currentPlan.schedule = aiResult.updated_schedule;
-      await currentPlan.save();
-      console.log(`[AI WORKOUT SYNC] Plan ${currentPlan._id} schedule updated successfully.`);
+    // 3. Mutate MongoDB routine if modification intent is present
+    if (currentPlan && isModificationIntent(cleanMsg)) {
+      const updatedPlanResult = await modifyWorkoutPlan(cleanMsg, currentPlan);
+      if (updatedPlanResult && updatedPlanResult.schedule && updatedPlanResult.schedule.length > 0) {
+        currentPlan.schedule = updatedPlanResult.schedule;
+        if (updatedPlanResult.title) currentPlan.title = updatedPlanResult.title;
+        await currentPlan.save();
+        planWasUpdated = true;
+      }
     }
 
-    // 5. Save AI's response to Chat history
-    await ChatMessage.create({ userId: user._id, text: replyText, isUser: false });
+    // 4. Generate conversational response
+    let context = '';
+    if (currentPlan) {
+      context = `Active Plan: "${currentPlan.title}". Current Day: ${user.current_day_index}.`;
+      if (planWasUpdated) {
+        context += ` (System Status: The user's active workout plan in the database has just been successfully updated with 5-6 exercises per day according to their instructions).`;
+      }
+    }
 
-    // 6. Send reply back to frontend
+    let aiReply = await generateChatResponse(cleanMsg, user, context);
+    aiReply = aiReply.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+    // 5. Save AI reply to chat history
+    await ChatMessage.create({ userId: user._id, text: aiReply, isUser: false });
+
+    // 6. Return response
     res.status(200).json({ 
-      reply: replyText,
-      planUpdated: aiResult.action === 'update_plan'
+      reply: aiReply,
+      planUpdated: planWasUpdated
     });
 
   } catch (error) {
