@@ -8,13 +8,38 @@ import { theme } from '../theme';
 import { useFocusEffect } from '@react-navigation/native';
 
 const ActiveWorkoutScreen = ({ route, navigation }) => {
-  const { sessionData } = route.params;
+  // Initialize with passed params, keep reactive state for live updates
+  const [session, setSession] = useState(route.params?.sessionData || null);
   const [completedExercises, setCompletedExercises] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [loading, setLoading] = useState(!route.params?.sessionData);
   
   const [infoModalVisible, setInfoModalVisible] = useState(false);
   const [selectedExercise, setSelectedExercise] = useState(null);
+
+  // Fetch updated active workout data from MongoDB
+  const fetchActiveWorkout = async () => {
+    try {
+      const res = await api.get('/workouts/active');
+      if (res.data) {
+        // Adapt response whether backend returns currentSession object or active plan schedule
+        const currentData = res.data.currentSession || (res.data.schedule ? res.data.schedule[0] : res.data);
+        setSession(currentData);
+      }
+    } catch (error) {
+      console.warn("Could not refresh active workout:", error.response?.data?.message || error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Automatically refresh workout data whenever screen gains focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchActiveWorkout();
+    }, [])
+  );
 
   const toggleExercise = (index) => {
     if (completedExercises.includes(index)) {
@@ -24,13 +49,6 @@ const ActiveWorkoutScreen = ({ route, navigation }) => {
     }
   };
 
-  useFocusEffect(
-    useCallback(() => {
-     // Call your fetch active workout function here
-      fetchActiveWorkout();
-    }, [])
-  );
-
   const openExerciseInfo = (exercise) => {
     setSelectedExercise(exercise);
     setImageError(false);
@@ -38,7 +56,7 @@ const ActiveWorkoutScreen = ({ route, navigation }) => {
   };
 
   const handleFinishWorkout = async () => {
-    const hasExercises = sessionData.exercises && sessionData.exercises.length > 0;
+    const hasExercises = session?.exercises && session.exercises.length > 0;
     
     if (hasExercises && completedExercises.length === 0) {
       return Alert.alert("Hold on", "Complete at least one exercise before saving!");
@@ -48,9 +66,9 @@ const ActiveWorkoutScreen = ({ route, navigation }) => {
     try {
       await api.post('/workouts/complete');
       navigation.replace('ProgressSummary', { 
-        sessionTitle: sessionData.title, 
+        sessionTitle: session?.title || 'Workout Session', 
         completedCount: hasExercises ? completedExercises.length : 0, 
-        totalCount: hasExercises ? sessionData.exercises.length : 0 
+        totalCount: hasExercises ? session.exercises.length : 0 
       });
     } catch (error) {
       Alert.alert("Error", "Could not save progress.");
@@ -66,7 +84,7 @@ const ActiveWorkoutScreen = ({ route, navigation }) => {
           <Text style={[styles.exerciseName, isDone && styles.textMuted]}>{item.name}</Text>
           <View style={styles.statsRow}>
             <Text style={[styles.statText, isDone && styles.textMuted]}>Sets: {item.sets}</Text>
-            <Text style={[styles.statText, isDone && styles.textMuted]}>Reps: {item.reps_target}</Text>
+            <Text style={[styles.statText, isDone && styles.textMuted]}>Reps: {item.reps_target || item.reps || "N/A"}</Text>
           </View>
         </View>
         
@@ -89,6 +107,15 @@ const ActiveWorkoutScreen = ({ route, navigation }) => {
     </View>
   );
 
+  if (loading && !session) {
+    return (
+      <SafeAreaView style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={theme.accent} />
+        <Text style={{ color: theme.textSecondary, marginTop: 12 }}>Loading session...</Text>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
@@ -100,12 +127,12 @@ const ActiveWorkoutScreen = ({ route, navigation }) => {
       </View>
 
       <View style={styles.titleContainer}>
-        <Text style={styles.sessionTitle}>{sessionData.title}</Text>
+        <Text style={styles.sessionTitle}>{session?.title || "Today's Session"}</Text>
       </View>
 
       <FlatList 
-        data={sessionData.exercises || []} 
-        keyExtractor={(item, index) => index.toString()} 
+        data={session?.exercises || []} 
+        keyExtractor={(item, index) => `${item.name}-${index}`} 
         renderItem={renderExercise} 
         contentContainerStyle={styles.listContainer} 
         ListEmptyComponent={renderEmptyState} 
@@ -162,7 +189,7 @@ export default ActiveWorkoutScreen;
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.background },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 50, paddingBottom: 15 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 15 },
   headerTitle: { color: theme.textSecondary, fontSize: 18, fontWeight: '600' },
   backBtn: { padding: 5 },
   titleContainer: { paddingHorizontal: 20, marginBottom: 20 },

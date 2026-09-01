@@ -11,28 +11,44 @@ const generateAndAssignPlan = async (req, res) => {
     const user = req.user; 
     const { planType } = req.body || {}; 
 
-    // 1. Get raw JSON from Modal Llama AI
+    console.log(`[GENERATION START] User: ${user._id} | Split: ${planType || 'General'}`);
+
+    // 1. Fetch structured workout schedule from Modal AI
     const generatedData = await generateWorkoutPlan(user, planType || "General");
 
-    // 2. Loop through exercises and fetch GIFs from RapidAPI
-    if (generatedData.schedule && Array.isArray(generatedData.schedule)) {
-      for (let i = 0; i < generatedData.schedule.length; i++) {
-        let day = generatedData.schedule[i];
-        if (day.exercises && day.exercises.length > 0) {
-          await Promise.all(
-            day.exercises.map(async (exercise) => {
-              const gifUrl = await getExerciseGif(exercise.name);
-              exercise.gif_url = gifUrl || null;
-            })
-          );
-        }
-      }
+    if (!generatedData || !Array.isArray(generatedData.schedule) || generatedData.schedule.length === 0) {
+      return res.status(422).json({ 
+        message: "AI returned an invalid workout routine format. Please retry." 
+      });
     }
 
-    // 3. Save fully populated plan to MongoDB
+    // 2. Parallel, non-blocking GIF resolution (2.0s hard timeout per exercise)
+    if (generatedData.schedule) {
+      const exercisePromises = [];
+
+      generatedData.schedule.forEach((day) => {
+        (day.exercises || []).forEach((exercise) => {
+          exercisePromises.push(
+            (async () => {
+              try {
+                const fetchPromise = getExerciseGif(exercise.name);
+                const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 2000));
+                exercise.gif_url = await Promise.race([fetchPromise, timeoutPromise]);
+              } catch (err) {
+                exercise.gif_url = null;
+              }
+            })()
+          );
+        });
+      });
+
+      await Promise.allSettled(exercisePromises);
+    }
+
+    // 3. Save generated plan to MongoDB
     const newPlan = await WorkoutPlan.create({
       userId: user._id,
-      title: generatedData.title,
+      title: generatedData.title || `${planType || 'Custom'} Program`,
       schedule: generatedData.schedule
     });
 
@@ -40,10 +56,18 @@ const generateAndAssignPlan = async (req, res) => {
     user.current_day_index = 1;
     await user.save();
 
-    res.status(201).json({ message: "Plan generated successfully!", planId: newPlan._id });
+    console.log(`[GENERATION SUCCESS] Plan ID ${newPlan._id} saved successfully.`);
+
+    return res.status(201).json({ 
+      message: "Plan generated successfully!", 
+      planId: newPlan._id 
+    });
+
   } catch (error) {
-    console.error("Workout Generation Error:", error);
-    res.status(500).json({ message: error.message });
+    console.error("[GENERATION ERROR]:", error.response?.data || error.message);
+    return res.status(500).json({ 
+      message: error.message || "Failed to generate plan from AI model." 
+    });
   }
 };
 
@@ -64,7 +88,7 @@ const getTodaysWorkout = async (req, res) => {
     }
 
     const currentDay = user.current_day_index || 1;
-    // Modulo index allows the 1-week template to repeat across 4 weeks seamlessly
+    // Modulo index allows repeating master splits across 4 weeks
     const scheduleIndex = (currentDay - 1) % plan.schedule.length;
     const session = plan.schedule[scheduleIndex];
 
@@ -72,7 +96,7 @@ const getTodaysWorkout = async (req, res) => {
     const lastWorkout = user.last_workout_date ? new Date(user.last_workout_date).toISOString().split('T')[0] : null;
     const isCompletedToday = lastWorkout === todayDate;
 
-    res.status(200).json({
+    return res.status(200).json({
       planId: plan._id,
       programTitle: plan.title,
       currentDay,
@@ -84,7 +108,7 @@ const getTodaysWorkout = async (req, res) => {
     });
   } catch (error) {
     console.error("Get Active Workout Error:", error);
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
 
@@ -111,7 +135,7 @@ const getDashboardData = async (req, res) => {
       chartWeights.push(chartWeights[0]);
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       stats: {
         workoutsCompleted,
         currentStreak: workoutsCompleted,
@@ -123,7 +147,7 @@ const getDashboardData = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
 
@@ -142,9 +166,12 @@ const completeWorkout = async (req, res) => {
     user.last_workout_date = new Date(); 
     await user.save();
 
-    res.status(200).json({ message: 'Workout marked as complete!', nextDay: user.current_day_index });
+    return res.status(200).json({ 
+      message: 'Workout marked as complete!', 
+      nextDay: user.current_day_index 
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
 

@@ -31,7 +31,7 @@ const DashboardScreen = ({ navigation }) => {
   const [timeRemaining, setTimeRemaining] = useState('');
   const [isCooldownActive, setIsCooldownActive] = useState(false);
 
-  const planOptions = ['Push Pull Legs (PPL)', 'Single Muscle (Bro Split)', 'Upper / Lower', 'Full Body'];
+  const planOptions = ['Push Pull Legs (PPL)', 'Single Muscle (Bro Split)', 'Upper / Lower', 'Double Muscle'];
 
   const fetchDashboard = async () => {
     try {
