@@ -2,9 +2,8 @@ const ChatMessage = require('../models/ChatMessage');
 const WorkoutPlan = require('../models/WorkoutPlan');
 const { generateChatResponse, modifyWorkoutPlan } = require('../services/aiService');
 
-// Detects workout alteration intents
 const isModificationIntent = (text) => {
-  const pattern = /(change|modify|update|adjust|switch|replace|add|increase|more exercises?|fewer exercises?|split|routine|workout plan|hypertrophy|sets|reps)/i;
+  const pattern = /(change|modify|update|adjust|switch|replace|swap|add|increase|more exercises?|fewer exercises?|split|routine|workout plan|hypertrophy|sets|reps)/i;
   return pattern.test(text);
 };
 
@@ -33,11 +32,8 @@ const sendChatMessage = async (req, res) => {
     }
 
     const cleanMsg = message.trim();
-
-    // 1. Save user's message to MongoDB
     await ChatMessage.create({ userId: user._id, text: cleanMsg, isUser: true });
 
-    // 2. Fetch current workout plan
     let currentPlan = null;
     if (user.active_program_id) {
       currentPlan = await WorkoutPlan.findById(user.active_program_id);
@@ -45,33 +41,37 @@ const sendChatMessage = async (req, res) => {
 
     let planWasUpdated = false;
 
-    // 3. Mutate MongoDB routine if modification intent is present
+    // Mutate MongoDB routine if modification intent is triggered
     if (currentPlan && isModificationIntent(cleanMsg)) {
       const updatedPlanResult = await modifyWorkoutPlan(cleanMsg, currentPlan);
-      if (updatedPlanResult && updatedPlanResult.schedule && updatedPlanResult.schedule.length > 0) {
+      
+      if (updatedPlanResult && Array.isArray(updatedPlanResult.schedule) && updatedPlanResult.schedule.length > 0) {
         currentPlan.schedule = updatedPlanResult.schedule;
         if (updatedPlanResult.title) currentPlan.title = updatedPlanResult.title;
+        
+        // Ensure Mongoose detects nested array modifications
+        currentPlan.markModified('schedule');
         await currentPlan.save();
         planWasUpdated = true;
+        console.log(`[AI WORKOUT SYNC] Plan ${currentPlan._id} schedule successfully updated and saved in MongoDB.`);
+      } else {
+        console.warn("[AI WORKOUT SYNC] Modification returned null or invalid schedule. Retaining existing plan.");
       }
     }
 
-    // 4. Generate conversational response
+    // Build context for chat response
     let context = '';
     if (currentPlan) {
       context = `Active Plan: "${currentPlan.title}". Current Day: ${user.current_day_index}.`;
       if (planWasUpdated) {
-        context += ` (System Status: The user's active workout plan in the database has just been successfully updated with 5-6 exercises per day according to their instructions).`;
+        context += ` (System Notice: The user's active workout plan was just successfully updated in MongoDB with proper muscle biomechanics).`;
       }
     }
 
     let aiReply = await generateChatResponse(cleanMsg, user, context);
-    aiReply = aiReply.replace(/```json/gi, '').replace(/```/g, '').trim();
 
-    // 5. Save AI reply to chat history
     await ChatMessage.create({ userId: user._id, text: aiReply, isUser: false });
 
-    // 6. Return response
     res.status(200).json({ 
       reply: aiReply,
       planUpdated: planWasUpdated

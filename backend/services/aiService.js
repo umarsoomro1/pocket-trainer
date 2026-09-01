@@ -2,22 +2,34 @@ const axios = require('axios');
 
 const MODAL_AI_URL = process.env.MODAL_AI_URL;
 
+const EXERCISE_RULES = `
+STRICT EXERCISE TAXONOMY (DO NOT MIX CATEGORIES):
+- PUSH / CHEST / TRICEPS ONLY: Flat Barbell Bench Press, Incline Dumbbell Press, Decline Press, Dumbbell Chest Fly, Cable Crossover, Chest Dips, Push-Ups, Tricep Rope Pushdown, Skull Crushers, Overhead Tricep Extension.
+  * FORBIDDEN ON PUSH/CHEST DAYS: Rows, Deadlifts, Lat Pulldowns, Pull-Ups, Bicep Curls, Squats, Leg Curls, Planks, Leg Raises, Overhead Shoulder Press.
+- PULL / BACK / BICEPS ONLY: Deadlifts, Barbell Bent-Over Row, Lat Pulldowns, Seated Cable Row, Face Pulls, Dumbbell Bicep Curls, Hammer Curls, Preacher Curls.
+- LEGS / LOWER BODY ONLY: Barbell Back Squats, Romanian Deadlifts (RDL), Leg Press, Leg Extensions, Lying Leg Curls, Standing Calf Raises.
+- SHOULDERS ONLY: Standing Overhead Press, Dumbbell Lateral Raises, Front Raises, Reverse Pec Deck, Arnold Press.
+`;
+
 /**
- * Workout Plan Generator -> Compact, highly structured 1-week routine template
+ * Generate Initial Plan
  */
 const generateWorkoutPlan = async (user, planType) => {
   const age = user.dob 
     ? Math.abs(new Date(Date.now() - new Date(user.dob).getTime()).getUTCFullYear() - 1970) 
     : 25;
 
-  const prompt = `Generate a 1-week master workout split for a ${age}yo (${user.weight || 150}lbs), Goal: ${user.goal || 'Hypertrophy'}, Style: ${planType || 'Push Pull Legs (PPL)'}. Include 3 to 4 training days with 5-6 exercises per day.`;
+  const prompt = `Create a 1-week master workout split for a ${age}yo weighing ${user.weight || 150}lbs, Goal: ${user.goal || 'Hypertrophy'}, Split Style: ${planType || 'Push Pull Legs'}. Exactly 5 to 6 exercises per workout day.`;
 
-  const system_prompt = `You are PocketTrainer AI. Generate a workout plan in valid, complete raw JSON matching this schema:
+  const system_prompt = `You are PocketTrainer AI, a strict CSCS strength coach.
+${EXERCISE_RULES}
+
+You MUST output ONLY valid JSON matching this schema:
 {
-  "title": "4-Week Hypertrophy Program",
+  "title": "Hypertrophy Mastery Split",
   "schedule": [
     {
-      "title": "Day 1 - Push",
+      "title": "Day 1 - Push (Chest & Triceps)",
       "type": "Strength",
       "exercises": [
         {
@@ -26,39 +38,67 @@ const generateWorkoutPlan = async (user, planType) => {
           "reps_target": "8-10",
           "rest_seconds": 90,
           "muscle": "Chest",
-          "benefits": "Compound chest builder"
+          "benefits": "Primary pectoral hypertrophy compound."
+        },
+        {
+          "name": "Incline Dumbbell Press",
+          "sets": 3,
+          "reps_target": "10-12",
+          "rest_seconds": 75,
+          "muscle": "Chest",
+          "benefits": "Upper pectoral development."
+        },
+        {
+          "name": "Dumbbell Chest Fly",
+          "sets": 3,
+          "reps_target": "12-15",
+          "rest_seconds": 60,
+          "muscle": "Chest",
+          "benefits": "Pectoral stretch and isolation."
+        },
+        {
+          "name": "Cable Crossover",
+          "sets": 3,
+          "reps_target": "12-15",
+          "rest_seconds": 60,
+          "muscle": "Chest",
+          "benefits": "Constant inner chest tension."
+        },
+        {
+          "name": "Skull Crushers",
+          "sets": 3,
+          "reps_target": "10-12",
+          "rest_seconds": 60,
+          "muscle": "Triceps",
+          "benefits": "Long-head tricep extension."
+        },
+        {
+          "name": "Triceps Rope Pushdown",
+          "sets": 3,
+          "reps_target": "12-15",
+          "rest_seconds": 45,
+          "muscle": "Triceps",
+          "benefits": "Lateral tricep head burnout."
         }
       ]
     }
   ]
 }
-Strict Rules:
-- 5 to 6 exercises per workout day.
-- Chest: Bench Press, Incline Press, Dips, Flyes (no Overhead Press on chest day).
-- Back: Deadlifts, Rows, Lat Pulldowns, Face Pulls.
-- Shoulders: Overhead Press, Lateral Raises, Rear Delt Flyes.
-- Arms: Strictly Biceps and Triceps.
-- Legs: Squats, Leg Press, RDLs, Leg Curls, Calf Raises.
-- Keep "benefits" to under 5 words to prevent token cutoff.
-- Output ONLY complete raw JSON. Ensure all brackets and strings are closed properly.`;
+Output strictly pure raw JSON. No markdown code blocks, no backticks, no comments.`;
 
   try {
     const response = await axios.post(
       MODAL_AI_URL,
-      { prompt, system_prompt, max_tokens: 4096, temperature: 0.15 },
+      { prompt, system_prompt, max_tokens: 3072, temperature: 0.1 },
       { headers: { 'Content-Type': 'application/json' }, timeout: 90000 }
     );
 
-    let rawText = response.data.raw_json || '';
-    rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-
-    // Extract exact JSON boundaries
+    let rawText = (response.data.raw_json || '').replace(/```json/gi, '').replace(/```/g, '').trim();
     const firstBrace = rawText.indexOf('{');
     const lastBrace = rawText.lastIndexOf('}');
     if (firstBrace !== -1 && lastBrace !== -1) {
       rawText = rawText.substring(firstBrace, lastBrace + 1);
     }
-
     return JSON.parse(rawText);
   } catch (error) {
     console.error("AI Generation Error:", error.response?.data || error.message);
@@ -75,21 +115,23 @@ const generateChatResponse = async (message, user, context = '') => {
       ? Math.abs(new Date(Date.now() - new Date(user.dob).getTime()).getUTCFullYear() - 1970)
       : 25;
 
-    const prompt = `User Stats: Age ${age}, Weight ${user.weight || 150}lbs, Goal: ${user.goal || 'Hypertrophy'}. ${context}\nUser Question: "${message}"`;
+    const prompt = `User Stats: Age ${age}, Weight ${user.weight || 150}lbs, Goal: ${user.goal || 'Hypertrophy'}. ${context}\nUser Request: "${message}"`;
     
     const system_prompt = `You are Pocket Trainer, an expert personal fitness coach.
-- Give accurate, medically sound coaching advice.
-- Use clean bullet points for exercise suggestions.
-- NEVER output raw JSON or code formatting in chat.
-- Biomechanics: Never include Overhead Press on Chest or Arm days.`;
+${EXERCISE_RULES}
+
+Rules:
+1. When discussing Push/Chest days, ONLY mention Chest and Tricep exercises. NEVER suggest rows, deadlifts, leg exercises, or core on chest day.
+2. Use clean markdown bullet points for exercise listings.
+3. NEVER output raw JSON or code formatting in chat. Respond in clean, encouraging coaching prose.`;
 
     const response = await axios.post(
       MODAL_AI_URL,
-      { prompt, system_prompt, max_tokens: 650, temperature: 0.3 },
+      { prompt, system_prompt, max_tokens: 650, temperature: 0.2 },
       { headers: { 'Content-Type': 'application/json' }, timeout: 45000 }
     );
 
-    return response.data.raw_json.trim();
+    return (response.data.raw_json || '').replace(/```json/gi, '').replace(/```/g, '').trim();
   } catch (error) {
     console.error("Chat AI Error:", error.response?.data || error.message);
     throw new Error("Failed to generate chat response from AI model");
@@ -97,17 +139,22 @@ const generateChatResponse = async (message, user, context = '') => {
 };
 
 /**
- * Dedicated Workout Plan Modifier
+ * Workout Plan Modifier -> Applies updates strictly to the active schedule
  */
 const modifyWorkoutPlan = async (userModificationPrompt, currentPlan) => {
-  const prompt = `Current Routine: "${currentPlan.title}".
-Schedule: ${JSON.stringify(currentPlan.schedule)}
-Modification: "${userModificationPrompt}"
-Update the complete schedule with 5-6 exercises per day. Keep benefits short.`;
+  const prompt = `Current Plan Title: "${currentPlan.title}".
+Current Schedule Data: ${JSON.stringify(currentPlan.schedule)}
 
-  const system_prompt = `You are PocketTrainer AI routine architect. Output ONLY valid, complete raw JSON:
+User Modification Request: "${userModificationPrompt}"
+
+Apply the user's requested changes directly to this plan. Ensure every training day has 5-6 exercises following strict kinesiology guidelines.`;
+
+  const system_prompt = `You are PocketTrainer AI routine architect.
+${EXERCISE_RULES}
+
+You MUST output ONLY valid raw JSON with the complete updated schedule matching this exact schema:
 {
-  "title": "Updated Program Title",
+  "title": "${currentPlan.title}",
   "schedule": [
     {
       "title": "Day 1 - Push",
@@ -119,30 +166,27 @@ Update the complete schedule with 5-6 exercises per day. Keep benefits short.`;
           "reps_target": "8-10",
           "rest_seconds": 90,
           "muscle": "Chest",
-          "benefits": "Compound chest builder"
+          "benefits": "Primary pectoral builder."
         }
       ]
     }
   ]
 }
-Output strictly valid JSON with no markdown tags.`;
+Output strictly valid JSON. Do not wrap in markdown or backticks.`;
 
   try {
     const response = await axios.post(
       MODAL_AI_URL,
-      { prompt, system_prompt, max_tokens: 4096, temperature: 0.15 },
+      { prompt, system_prompt, max_tokens: 3072, temperature: 0.1 },
       { headers: { 'Content-Type': 'application/json' }, timeout: 90000 }
     );
 
-    let rawText = response.data.raw_json || '';
-    rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-
+    let rawText = (response.data.raw_json || '').replace(/```json/gi, '').replace(/```/g, '').trim();
     const firstBrace = rawText.indexOf('{');
     const lastBrace = rawText.lastIndexOf('}');
     if (firstBrace !== -1 && lastBrace !== -1) {
       rawText = rawText.substring(firstBrace, lastBrace + 1);
     }
-
     return JSON.parse(rawText);
   } catch (error) {
     console.error("Modify Workout AI Error:", error.response?.data || error.message);
