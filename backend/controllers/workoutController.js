@@ -13,39 +13,36 @@ const generateAndAssignPlan = async (req, res) => {
 
     console.log(`[GENERATION START] User: ${user._id} | Split: ${planType || 'General'}`);
 
-    // 1. Fetch structured workout schedule from Modal AI
-    const generatedData = await generateWorkoutPlan(user, planType || "General");
+    // 1. Get structured baseline plan (Instant & 100% anatomically sound)
+    const generatedData = await generateWorkoutPlan(user, planType || "Push Pull Legs (PPL)");
 
     if (!generatedData || !Array.isArray(generatedData.schedule) || generatedData.schedule.length === 0) {
       return res.status(422).json({ 
-        message: "AI returned an invalid workout routine format. Please retry." 
+        message: "Failed to assemble workout split. Please retry." 
       });
     }
 
-    // 2. Parallel, non-blocking GIF resolution (2.0s hard timeout per exercise)
-    if (generatedData.schedule) {
-      const exercisePromises = [];
-
-      generatedData.schedule.forEach((day) => {
-        (day.exercises || []).forEach((exercise) => {
-          exercisePromises.push(
-            (async () => {
-              try {
-                const fetchPromise = getExerciseGif(exercise.name);
-                const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 2000));
-                exercise.gif_url = await Promise.race([fetchPromise, timeoutPromise]);
-              } catch (err) {
-                exercise.gif_url = null;
-              }
-            })()
-          );
-        });
+    // 2. Fetch exercise demonstration GIFs (non-blocking, parallel with 1.5s timeout)
+    const gifPromises = [];
+    generatedData.schedule.forEach((day) => {
+      (day.exercises || []).forEach((exercise) => {
+        gifPromises.push(
+          (async () => {
+            try {
+              const fetchPromise = getExerciseGif(exercise.name);
+              const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 1500));
+              exercise.gif_url = await Promise.race([fetchPromise, timeoutPromise]);
+            } catch (err) {
+              exercise.gif_url = null;
+            }
+          })()
+        );
       });
+    });
 
-      await Promise.allSettled(exercisePromises);
-    }
+    await Promise.allSettled(gifPromises);
 
-    // 3. Save generated plan to MongoDB
+    // 3. Save new plan to MongoDB
     const newPlan = await WorkoutPlan.create({
       userId: user._id,
       title: generatedData.title || `${planType || 'Custom'} Program`,
@@ -64,9 +61,9 @@ const generateAndAssignPlan = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("[GENERATION ERROR]:", error.response?.data || error.message);
+    console.error("[GENERATION ERROR]:", error.message);
     return res.status(500).json({ 
-      message: error.message || "Failed to generate plan from AI model." 
+      message: error.message || "Failed to generate plan." 
     });
   }
 };

@@ -2,7 +2,7 @@ const axios = require('axios');
 
 const MODAL_AI_URL = process.env.MODAL_AI_URL;
 
-// Canonical verified exercise pools
+// Canonical verified exercise pools for all muscle groups
 const EXERCISE_POOLS = {
   Chest: [
     { name: "Barbell Bench Press", sets: 4, reps_target: "8-10", rest_seconds: 90, muscle: "Chest", benefits: "Primary pectoral compound builder" },
@@ -45,7 +45,7 @@ const EXERCISE_POOLS = {
   ]
 };
 
-// Deterministic Builder for all 4 Splits
+// Deterministic Plan Builder for all 4 Splits (100% accurate, zero latency/timeout)
 const buildDeterministicPlan = (planType) => {
   const type = (planType || '').toLowerCase();
 
@@ -100,27 +100,32 @@ const buildDeterministicPlan = (planType) => {
   };
 };
 
+// Safe JSON parser with fallback string-cleaning
 const safeJsonParse = (str) => {
   let cleaned = str.replace(/```json/gi, '').replace(/```/g, '').trim();
   const firstBrace = cleaned.indexOf('{');
   const lastBrace = cleaned.lastIndexOf('}');
+
   if (firstBrace !== -1 && lastBrace !== -1) {
     cleaned = cleaned.substring(firstBrace, lastBrace + 1);
   }
+
   try {
     return JSON.parse(cleaned);
   } catch (e) {
     try {
-      const repaired = cleaned.replace(/,\s*([\]}])/g, '$1').replace(/}\s*{/g, '},{');
+      const repaired = cleaned
+        .replace(/,\s*([\]}])/g, '$1')
+        .replace(/}\s*{/g, '},{');
       return JSON.parse(repaired);
-    } catch (err) {
+    } catch (innerErr) {
       return null;
     }
   }
 };
 
 /**
- * Generate Workout Plan -> Instant execution with zero timeout risk
+ * Generate Initial Plan -> Instant execution with zero timeout risk
  */
 const generateWorkoutPlan = async (user, planType = "Push Pull Legs (PPL)") => {
   return buildDeterministicPlan(planType);
