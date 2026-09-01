@@ -2,7 +2,7 @@ const axios = require('axios');
 
 const MODAL_AI_URL = process.env.MODAL_AI_URL;
 
-// Canonical verified exercise taxonomy
+// Canonical verified exercise pools
 const EXERCISE_POOLS = {
   Chest: [
     { name: "Barbell Bench Press", sets: 4, reps_target: "8-10", rest_seconds: 90, muscle: "Chest", benefits: "Primary pectoral compound builder" },
@@ -45,73 +45,59 @@ const EXERCISE_POOLS = {
   ]
 };
 
-// Deterministic sanitizer: Cleanses and replaces hallucinatory or misclassified exercises
-const sanitizeSessionExercises = (dayTitle, exercises) => {
-  const title = (dayTitle || '').toLowerCase();
-  
-  // Single Muscle Chest Check
-  if (title.includes('chest') && !title.includes('push') && !title.includes('bicep') && !title.includes('back')) {
-    return EXERCISE_POOLS.Chest.slice(0, 6);
-  }
-  // Single Muscle Back Check
-  if (title.includes('back') && !title.includes('pull') && !title.includes('tricep')) {
-    return EXERCISE_POOLS.Back.slice(0, 6);
-  }
-  // Single Muscle Shoulder Check
-  if (title.includes('shoulder') && !title.includes('arm')) {
-    return EXERCISE_POOLS.Shoulders.slice(0, 5);
-  }
-  // Single Muscle Leg Check
-  if (title.includes('leg')) {
-    return EXERCISE_POOLS.Legs.slice(0, 6);
-  }
-  // Single Muscle Arm Check
-  if (title.includes('arm')) {
-    return EXERCISE_POOLS.Arms.slice(0, 6);
+// Deterministic Builder for all 4 Splits
+const buildDeterministicPlan = (planType) => {
+  const type = (planType || '').toLowerCase();
+
+  // 1. Single Muscle (Bro Split)
+  if (type.includes('bro') || type.includes('single')) {
+    return {
+      title: "5-Day Single Muscle Hypertrophy Split",
+      schedule: [
+        { title: "Day 1 - Chest", type: "Strength", exercises: EXERCISE_POOLS.Chest.slice(0, 6) },
+        { title: "Day 2 - Back", type: "Strength", exercises: EXERCISE_POOLS.Back.slice(0, 6) },
+        { title: "Day 3 - Shoulders", type: "Strength", exercises: EXERCISE_POOLS.Shoulders.slice(0, 5) },
+        { title: "Day 4 - Legs", type: "Strength", exercises: EXERCISE_POOLS.Legs.slice(0, 6) },
+        { title: "Day 5 - Arms", type: "Strength", exercises: EXERCISE_POOLS.Arms.slice(0, 6) }
+      ]
+    };
   }
 
-  // General Filter for Push/Pull/Double-Muscle splits
-  const sanitized = [];
-  const usedNames = new Set();
-
-  for (const ex of exercises) {
-    const nameLower = (ex.name || '').toLowerCase();
-    
-    // Disallow shoulder presses on non-shoulder/non-push sessions
-    if (nameLower.includes('shoulder press') || nameLower.includes('overhead press') || nameLower.includes('rotation')) {
-      if (!title.includes('push') && !title.includes('shoulder') && !title.includes('upper')) {
-        continue; // drop hallucinated movement
-      }
-    }
-    // Disallow tricep movements on pure chest days
-    if (nameLower.includes('tricep') || nameLower.includes('pushdown') || nameLower.includes('kickback')) {
-      if (title.includes('chest') && !title.includes('push') && !title.includes('tricep')) {
-        continue;
-      }
-    }
-
-    if (!usedNames.has(ex.name)) {
-      usedNames.add(ex.name);
-      sanitized.push(ex);
-    }
+  // 2. Double Muscle Split
+  if (type.includes('double')) {
+    return {
+      title: "4-Day Double Muscle Hypertrophy Split",
+      schedule: [
+        { title: "Day 1 - Chest & Biceps", type: "Strength", exercises: [...EXERCISE_POOLS.Chest.slice(0, 3), ...EXERCISE_POOLS.Arms.slice(0, 3)] },
+        { title: "Day 2 - Back & Triceps", type: "Strength", exercises: [...EXERCISE_POOLS.Back.slice(0, 3), ...EXERCISE_POOLS.Arms.slice(3, 6)] },
+        { title: "Day 3 - Shoulders & Abs", type: "Strength", exercises: EXERCISE_POOLS.Shoulders.slice(0, 5) },
+        { title: "Day 4 - Legs", type: "Strength", exercises: EXERCISE_POOLS.Legs.slice(0, 6) }
+      ]
+    };
   }
 
-  // Ensure minimum volume (5 exercises) by backfilling from relevant pool
-  let fallbackPool = EXERCISE_POOLS.Chest;
-  if (title.includes('back') || title.includes('pull')) fallbackPool = EXERCISE_POOLS.Back;
-  if (title.includes('leg')) fallbackPool = EXERCISE_POOLS.Legs;
-  if (title.includes('shoulder')) fallbackPool = EXERCISE_POOLS.Shoulders;
-
-  let poolIdx = 0;
-  while (sanitized.length < 5 && poolIdx < fallbackPool.length) {
-    if (!usedNames.has(fallbackPool[poolIdx].name)) {
-      sanitized.push(fallbackPool[poolIdx]);
-      usedNames.add(fallbackPool[poolIdx].name);
-    }
-    poolIdx++;
+  // 3. Upper / Lower Split
+  if (type.includes('upper') || type.includes('lower')) {
+    return {
+      title: "4-Day Upper / Lower Split",
+      schedule: [
+        { title: "Day 1 - Upper Body (Power)", type: "Strength", exercises: [EXERCISE_POOLS.Chest[0], EXERCISE_POOLS.Back[1], EXERCISE_POOLS.Shoulders[0], EXERCISE_POOLS.Back[2], EXERCISE_POOLS.Arms[0], EXERCISE_POOLS.Arms[3]] },
+        { title: "Day 2 - Lower Body (Power)", type: "Strength", exercises: EXERCISE_POOLS.Legs.slice(0, 6) },
+        { title: "Day 3 - Upper Body (Hypertrophy)", type: "Strength", exercises: [EXERCISE_POOLS.Chest[1], EXERCISE_POOLS.Chest[3], EXERCISE_POOLS.Back[3], EXERCISE_POOLS.Shoulders[1], EXERCISE_POOLS.Arms[1], EXERCISE_POOLS.Arms[4]] },
+        { title: "Day 4 - Lower Body (Hypertrophy)", type: "Strength", exercises: [EXERCISE_POOLS.Legs[1], EXERCISE_POOLS.Legs[2], EXERCISE_POOLS.Legs[3], EXERCISE_POOLS.Legs[4], EXERCISE_POOLS.Legs[5]] }
+      ]
+    };
   }
 
-  return sanitized.slice(0, 6);
+  // 4. Default: Push / Pull / Legs (PPL)
+  return {
+    title: "Push Pull Legs (PPL) Split",
+    schedule: [
+      { title: "Day 1 - Push", type: "Strength", exercises: [EXERCISE_POOLS.Chest[0], EXERCISE_POOLS.Chest[1], EXERCISE_POOLS.Chest[3], EXERCISE_POOLS.Shoulders[0], EXERCISE_POOLS.Arms[3], EXERCISE_POOLS.Arms[4]] },
+      { title: "Day 2 - Pull", type: "Strength", exercises: [EXERCISE_POOLS.Back[0], EXERCISE_POOLS.Back[1], EXERCISE_POOLS.Back[2], EXERCISE_POOLS.Back[4], EXERCISE_POOLS.Arms[0], EXERCISE_POOLS.Arms[1]] },
+      { title: "Day 3 - Legs", type: "Strength", exercises: EXERCISE_POOLS.Legs.slice(0, 6) }
+    ]
+  };
 };
 
 const safeJsonParse = (str) => {
@@ -134,62 +120,14 @@ const safeJsonParse = (str) => {
 };
 
 /**
- * Generate Workout Plan
+ * Generate Workout Plan -> Instant execution with zero timeout risk
  */
 const generateWorkoutPlan = async (user, planType = "Push Pull Legs (PPL)") => {
-  const age = user.dob 
-    ? Math.abs(new Date(Date.now() - new Date(user.dob).getTime()).getUTCFullYear() - 1970) 
-    : 25;
-
-  const prompt = `Create a 1-week master workout plan for a ${age}yo (${user.weight || 150}lbs), Goal: ${user.goal || 'Hypertrophy'}, Split Style: "${planType}". Provide 5-6 exercises per day.`;
-
-  const system_prompt = `You are PocketTrainer AI. Generate a workout plan in valid raw JSON matching this schema:
-{
-  "title": "Hypertrophy Program",
-  "schedule": [
-    {
-      "title": "Day 1 - Chest",
-      "type": "Strength",
-      "exercises": [
-        {
-          "name": "Barbell Bench Press",
-          "sets": 4,
-          "reps_target": "8-10",
-          "rest_seconds": 90,
-          "muscle": "Chest",
-          "benefits": "Primary chest builder"
-        }
-      ]
-    }
-  ]
-}
-Output strictly raw JSON without markdown.`;
-
-  try {
-    const response = await axios.post(
-      MODAL_AI_URL,
-      { prompt, system_prompt, max_tokens: 3072, temperature: 0.1 },
-      { headers: { 'Content-Type': 'application/json' }, timeout: 90000 }
-    );
-
-    const parsed = safeJsonParse(response.data.raw_json || '');
-    if (!parsed || !parsed.schedule) throw new Error("Could not parse AI output.");
-
-    // Enforce programmatic biomechanical validation on every session
-    parsed.schedule = parsed.schedule.map((session) => ({
-      ...session,
-      exercises: sanitizeSessionExercises(session.title, session.exercises || [])
-    }));
-
-    return parsed;
-  } catch (error) {
-    console.error("AI Generation Error:", error.response?.data || error.message);
-    throw new Error("Failed to generate plan from AI model");
-  }
+  return buildDeterministicPlan(planType);
 };
 
 /**
- * Conversational Chat
+ * Pure Conversational Chat
  */
 const generateChatResponse = async (message, user, context = '') => {
   try {
@@ -199,15 +137,15 @@ const generateChatResponse = async (message, user, context = '') => {
 
     const prompt = `User Stats: Age ${age}, Weight ${user.weight || 150}lbs, Goal: ${user.goal || 'Hypertrophy'}. ${context}\nUser Request: "${message}"`;
     
-    const system_prompt = `You are Pocket Trainer, an expert CSCS personal trainer.
-- Answer questions with motivating, medically accurate advice.
-- When answering about a single-muscle chest day, discuss ONLY chest movements (Bench, Incline, Dips, Flyes). Never suggest shoulders, triceps, or legs for chest day.
-- Format lists with clean markdown bullets. Do not output raw JSON.`;
+    const system_prompt = `You are Pocket Trainer, an expert personal fitness coach.
+- Give accurate, motivating advice.
+- When discussing single-muscle Chest days, recommend ONLY chest movements. Never put shoulder press, triceps, or legs on chest day.
+- Format advice in clean markdown bullet points. Never output raw JSON.`;
 
     const response = await axios.post(
       MODAL_AI_URL,
-      { prompt, system_prompt, max_tokens: 650, temperature: 0.2 },
-      { headers: { 'Content-Type': 'application/json' }, timeout: 45000 }
+      { prompt, system_prompt, max_tokens: 450, temperature: 0.2 },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 20000 }
     );
 
     return (response.data.raw_json || '').replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -218,13 +156,13 @@ const generateChatResponse = async (message, user, context = '') => {
 };
 
 /**
- * Workout Modifier
+ * Workout Session Modifier (Single Day Scoped)
  */
 const modifyWorkoutPlan = async (userModificationPrompt, currentPlan, currentDayIndex = 1) => {
   const dayIdx = (currentDayIndex - 1) % currentPlan.schedule.length;
   const currentSession = currentPlan.schedule[dayIdx];
 
-  const prompt = `Current Session: ${JSON.stringify(currentSession)}\nUser Request: "${userModificationPrompt}"\nUpdate this session with 5 to 6 valid exercises.`;
+  const prompt = `Current Session to Modify: ${JSON.stringify(currentSession)}\nUser Request: "${userModificationPrompt}"\nProvide 5 to 6 exercises adhering strictly to the muscle focus.`;
 
   const system_prompt = `You are PocketTrainer AI routine architect. Output ONLY valid raw JSON for this session:
 {
@@ -241,20 +179,16 @@ const modifyWorkoutPlan = async (userModificationPrompt, currentPlan, currentDay
     }
   ]
 }
-Output strictly raw JSON without markdown.`;
+Output strictly raw JSON without markdown tags.`;
 
   try {
     const response = await axios.post(
       MODAL_AI_URL,
-      { prompt, system_prompt, max_tokens: 1536, temperature: 0.1 },
-      { headers: { 'Content-Type': 'application/json' }, timeout: 60000 }
+      { prompt, system_prompt, max_tokens: 1024, temperature: 0.1 },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 30000 }
     );
 
-    const parsedSession = safeJsonParse(response.data.raw_json || '');
-    if (parsedSession && parsedSession.exercises) {
-      parsedSession.exercises = sanitizeSessionExercises(parsedSession.title, parsedSession.exercises);
-    }
-    return parsedSession;
+    return safeJsonParse(response.data.raw_json || '');
   } catch (error) {
     console.error("Modify Workout AI Error:", error.response?.data || error.message);
     return null;
