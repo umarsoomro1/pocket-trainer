@@ -41,34 +41,37 @@ const sendChatMessage = async (req, res) => {
 
     let planWasUpdated = false;
 
-    // Mutate MongoDB routine if modification intent is triggered
+    // Mutate MongoDB routine if modification intent is present
     if (currentPlan && isModificationIntent(cleanMsg)) {
-      const updatedPlanResult = await modifyWorkoutPlan(cleanMsg, currentPlan);
-      
-      if (updatedPlanResult && Array.isArray(updatedPlanResult.schedule) && updatedPlanResult.schedule.length > 0) {
-        currentPlan.schedule = updatedPlanResult.schedule;
-        if (updatedPlanResult.title) currentPlan.title = updatedPlanResult.title;
+      const currentDayIndex = user.current_day_index || 1;
+      const updatedSession = await modifyWorkoutPlan(cleanMsg, currentPlan, currentDayIndex);
+
+      if (updatedSession && Array.isArray(updatedSession.exercises) && updatedSession.exercises.length > 0) {
+        const dayIdx = (currentDayIndex - 1) % currentPlan.schedule.length;
         
-        // Ensure Mongoose detects nested array modifications
+        // Update the target day's session directly
+        currentPlan.schedule[dayIdx] = updatedSession;
         currentPlan.markModified('schedule');
         await currentPlan.save();
+        
         planWasUpdated = true;
-        console.log(`[AI WORKOUT SYNC] Plan ${currentPlan._id} schedule successfully updated and saved in MongoDB.`);
+        console.log(`[AI WORKOUT SYNC] Day ${dayIdx + 1} of Plan ${currentPlan._id} successfully updated in MongoDB.`);
       } else {
-        console.warn("[AI WORKOUT SYNC] Modification returned null or invalid schedule. Retaining existing plan.");
+        console.warn("[AI WORKOUT SYNC] Modification failed to parse or returned invalid exercises.");
       }
     }
 
-    // Build context for chat response
+    // Build context for conversational reply
     let context = '';
     if (currentPlan) {
       context = `Active Plan: "${currentPlan.title}". Current Day: ${user.current_day_index}.`;
       if (planWasUpdated) {
-        context += ` (System Notice: The user's active workout plan was just successfully updated in MongoDB with proper muscle biomechanics).`;
+        context += ` (System Status: The user's active workout plan was just successfully updated in the database with 5-6 exercises following strict kinesiology guidelines).`;
       }
     }
 
     let aiReply = await generateChatResponse(cleanMsg, user, context);
+    aiReply = aiReply.replace(/```json/gi, '').replace(/```/g, '').trim();
 
     await ChatMessage.create({ userId: user._id, text: aiReply, isUser: false });
 
