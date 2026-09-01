@@ -2,19 +2,37 @@ const ChatMessage = require('../models/ChatMessage');
 const WorkoutPlan = require('../models/WorkoutPlan');
 const { generateChatResponse, modifyWorkoutPlan } = require('../services/aiService');
 
+// Strict Action-Verb intent detection
 const isModificationIntent = (text) => {
-  const pattern = /(change|modify|update|adjust|switch|replace|swap|add|increase|remove|delete|more exercises?|fewer exercises?|split|routine|workout plan|hypertrophy|sets|reps)/i;
-  return pattern.test(text);
+  const clean = text.trim().toLowerCase();
+
+  // 1. Immediately ignore read-only / informational questions
+  const isQuestion = /^(what|how|show|view|tell me|explain|can you explain|list|describe|preview)\b/i.test(clean);
+  if (isQuestion && !/(change|replace|swap|update|modify|substitute|switch|remove|delete|add)/i.test(clean)) {
+    return false;
+  }
+
+  // 2. Only trigger if explicit mutation action verbs are present
+  const mutationActionRegex = /\b(change|modify|update|adjust|switch|replace|swap|substitute|remove|delete|add)\b/i;
+  return mutationActionRegex.test(clean);
 };
 
 // Determines which schedule day the user is targeting in their message
 const resolveTargetDayIndex = (text, schedule, currentDayIndex) => {
   const lower = text.toLowerCase();
+
+  // Check explicit day numbers first (e.g., "day 2", "day 3")
+  const dayMatch = lower.match(/day\s*(\d+)/i);
+  if (dayMatch && dayMatch[1]) {
+    const parsedDay = parseInt(dayMatch[1], 10);
+    if (parsedDay >= 1 && parsedDay <= schedule.length) {
+      return parsedDay - 1;
+    }
+  }
   
+  // Check muscle names in prompt (e.g. "chest", "back", "leg", "push", "pull", "arm", "shoulder")
   for (let i = 0; i < schedule.length; i++) {
     const titleLower = schedule[i].title.toLowerCase();
-    
-    // Check muscle names in prompt (e.g. "chest", "back", "leg", "push", "pull", "arm")
     if (lower.includes('chest') && titleLower.includes('chest')) return i;
     if (lower.includes('back') && titleLower.includes('back')) return i;
     if (lower.includes('shoulder') && titleLower.includes('shoulder')) return i;
@@ -40,7 +58,7 @@ const getChatHistory = async (req, res) => {
   }
 };
 
-// @desc    Send message to AI, auto-sync modifications to DB, and save history
+// @desc    Send message to AI, conditionally update DB on strict mutation intent, save history
 // @route   POST /api/chat
 // @access  Private
 const sendChatMessage = async (req, res) => {
@@ -62,7 +80,7 @@ const sendChatMessage = async (req, res) => {
 
     let planWasUpdated = false;
 
-    // Mutate MongoDB routine if modification intent is present
+    // Mutate MongoDB routine ONLY if strict modification action intent is present
     if (currentPlan && currentPlan.schedule?.length > 0 && isModificationIntent(cleanMsg)) {
       const targetIdx = resolveTargetDayIndex(cleanMsg, currentPlan.schedule, user.current_day_index || 1);
       const updatedSession = await modifyWorkoutPlan(cleanMsg, currentPlan, targetIdx);
@@ -82,9 +100,14 @@ const sendChatMessage = async (req, res) => {
     // Build context for conversational reply
     let context = '';
     if (currentPlan) {
-      context = `Active Plan: "${currentPlan.title}". Current Day: ${user.current_day_index}.`;
+      const fullScheduleSummary = currentPlan.schedule
+        .map((s, idx) => `Day ${idx + 1}: ${s.title} (${(s.exercises || []).map(e => e.name).join(', ')})`)
+        .join(' | ');
+
+      context = `Active Plan: "${currentPlan.title}". Current Active Day: Day ${user.current_day_index}. Full Plan Outline: [${fullScheduleSummary}].`;
+
       if (planWasUpdated) {
-        context += ` (System Status: The user's active workout plan was just successfully updated in the database with 5-6 verified exercises).`;
+        context += ` (System Status: The user's active workout plan was just successfully updated in the database).`;
       }
     }
 
