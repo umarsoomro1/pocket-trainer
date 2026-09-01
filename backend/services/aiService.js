@@ -45,7 +45,7 @@ const EXERCISE_POOLS = {
   ]
 };
 
-// Deterministic Plan Builder for all 4 Splits (100% accurate, zero latency/timeout)
+// Deterministic Plan Builder for all 4 Splits
 const buildDeterministicPlan = (planType) => {
   const type = (planType || '').toLowerCase();
 
@@ -100,7 +100,53 @@ const buildDeterministicPlan = (planType) => {
   };
 };
 
-// Safe JSON parser with fallback string-cleaning
+// Post-sanitizer for modified sessions to prevent LLM anatomical drift
+const sanitizeModifiedSession = (title, exercises) => {
+  const t = (title || '').toLowerCase();
+  const sanitized = [];
+  const seen = new Set();
+
+  for (const ex of exercises) {
+    if (!ex || !ex.name) continue;
+    const nameLower = ex.name.toLowerCase();
+
+    // Guard: Prevent shoulder presses/rotations on pure chest days
+    if ((nameLower.includes('shoulder press') || nameLower.includes('overhead press') || nameLower.includes('rotation')) &&
+        t.includes('chest') && !t.includes('push') && !t.includes('shoulder')) {
+      continue;
+    }
+
+    // Guard: Prevent triceps on pure chest bro-split days
+    if ((nameLower.includes('tricep') || nameLower.includes('pushdown') || nameLower.includes('kickback')) &&
+        t.includes('chest') && !t.includes('push') && !t.includes('arm')) {
+      continue;
+    }
+
+    if (!seen.has(ex.name)) {
+      seen.add(ex.name);
+      sanitized.push(ex);
+    }
+  }
+
+  // Backfill if exercises dropped below 5
+  let pool = EXERCISE_POOLS.Chest;
+  if (t.includes('back') || t.includes('pull')) pool = EXERCISE_POOLS.Back;
+  if (t.includes('shoulder')) pool = EXERCISE_POOLS.Shoulders;
+  if (t.includes('leg')) pool = EXERCISE_POOLS.Legs;
+  if (t.includes('arm')) pool = EXERCISE_POOLS.Arms;
+
+  let idx = 0;
+  while (sanitized.length < 5 && idx < pool.length) {
+    if (!seen.has(pool[idx].name)) {
+      sanitized.push(pool[idx]);
+      seen.add(pool[idx].name);
+    }
+    idx++;
+  }
+
+  return sanitized.slice(0, 6);
+};
+
 const safeJsonParse = (str) => {
   let cleaned = str.replace(/```json/gi, '').replace(/```/g, '').trim();
   const firstBrace = cleaned.indexOf('{');
@@ -114,9 +160,7 @@ const safeJsonParse = (str) => {
     return JSON.parse(cleaned);
   } catch (e) {
     try {
-      const repaired = cleaned
-        .replace(/,\s*([\]}])/g, '$1')
-        .replace(/}\s*{/g, '},{');
+      const repaired = cleaned.replace(/,\s*([\]}])/g, '$1').replace(/}\s*{/g, '},{');
       return JSON.parse(repaired);
     } catch (innerErr) {
       return null;
@@ -124,16 +168,10 @@ const safeJsonParse = (str) => {
   }
 };
 
-/**
- * Generate Initial Plan -> Instant execution with zero timeout risk
- */
 const generateWorkoutPlan = async (user, planType = "Push Pull Legs (PPL)") => {
   return buildDeterministicPlan(planType);
 };
 
-/**
- * Pure Conversational Chat
- */
 const generateChatResponse = async (message, user, context = '') => {
   try {
     const age = user.dob
@@ -143,9 +181,10 @@ const generateChatResponse = async (message, user, context = '') => {
     const prompt = `User Stats: Age ${age}, Weight ${user.weight || 150}lbs, Goal: ${user.goal || 'Hypertrophy'}. ${context}\nUser Request: "${message}"`;
     
     const system_prompt = `You are Pocket Trainer, an expert personal fitness coach.
-- Give accurate, motivating advice.
-- When discussing single-muscle Chest days, recommend ONLY chest movements. Never put shoulder press, triceps, or legs on chest day.
-- Format advice in clean markdown bullet points. Never output raw JSON.`;
+Rules:
+1. Provide motivating, accurate, and scientifically sound advice.
+2. If discussing a single-muscle Chest day, recommend ONLY chest movements. Never put shoulder press, triceps, or legs on chest day.
+3. Format advice in clean markdown bullet points. Never output raw JSON.`;
 
     const response = await axios.post(
       MODAL_AI_URL,
@@ -160,14 +199,10 @@ const generateChatResponse = async (message, user, context = '') => {
   }
 };
 
-/**
- * Workout Session Modifier (Single Day Scoped)
- */
-const modifyWorkoutPlan = async (userModificationPrompt, currentPlan, currentDayIndex = 1) => {
-  const dayIdx = (currentDayIndex - 1) % currentPlan.schedule.length;
-  const currentSession = currentPlan.schedule[dayIdx];
+const modifyWorkoutPlan = async (userModificationPrompt, currentPlan, targetDayIndex = 0) => {
+  const currentSession = currentPlan.schedule[targetDayIndex];
 
-  const prompt = `Current Session to Modify: ${JSON.stringify(currentSession)}\nUser Request: "${userModificationPrompt}"\nProvide 5 to 6 exercises adhering strictly to the muscle focus.`;
+  const prompt = `Current Session to Modify: ${JSON.stringify(currentSession)}\nUser Request: "${userModificationPrompt}"\nProvide 5 to 6 valid exercises adhering strictly to the muscle focus.`;
 
   const system_prompt = `You are PocketTrainer AI routine architect. Output ONLY valid raw JSON for this session:
 {
@@ -193,7 +228,11 @@ Output strictly raw JSON without markdown tags.`;
       { headers: { 'Content-Type': 'application/json' }, timeout: 30000 }
     );
 
-    return safeJsonParse(response.data.raw_json || '');
+    const parsed = safeJsonParse(response.data.raw_json || '');
+    if (parsed && Array.isArray(parsed.exercises)) {
+      parsed.exercises = sanitizeModifiedSession(parsed.title || currentSession.title, parsed.exercises);
+    }
+    return parsed;
   } catch (error) {
     console.error("Modify Workout AI Error:", error.response?.data || error.message);
     return null;

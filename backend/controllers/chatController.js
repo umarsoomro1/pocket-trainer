@@ -3,8 +3,29 @@ const WorkoutPlan = require('../models/WorkoutPlan');
 const { generateChatResponse, modifyWorkoutPlan } = require('../services/aiService');
 
 const isModificationIntent = (text) => {
-  const pattern = /(change|modify|update|adjust|switch|replace|swap|add|increase|more exercises?|fewer exercises?|split|routine|workout plan|hypertrophy|sets|reps)/i;
+  const pattern = /(change|modify|update|adjust|switch|replace|swap|add|increase|remove|delete|more exercises?|fewer exercises?|split|routine|workout plan|hypertrophy|sets|reps)/i;
   return pattern.test(text);
+};
+
+// Determines which schedule day the user is targeting in their message
+const resolveTargetDayIndex = (text, schedule, currentDayIndex) => {
+  const lower = text.toLowerCase();
+  
+  for (let i = 0; i < schedule.length; i++) {
+    const titleLower = schedule[i].title.toLowerCase();
+    
+    // Check muscle names in prompt (e.g. "chest", "back", "leg", "push", "pull", "arm")
+    if (lower.includes('chest') && titleLower.includes('chest')) return i;
+    if (lower.includes('back') && titleLower.includes('back')) return i;
+    if (lower.includes('shoulder') && titleLower.includes('shoulder')) return i;
+    if (lower.includes('leg') && titleLower.includes('leg')) return i;
+    if (lower.includes('arm') && titleLower.includes('arm')) return i;
+    if (lower.includes('push') && titleLower.includes('push')) return i;
+    if (lower.includes('pull') && titleLower.includes('pull')) return i;
+  }
+
+  // Fallback to active day
+  return (currentDayIndex - 1) % schedule.length;
 };
 
 // @desc    Get user's chat history
@@ -42,20 +63,17 @@ const sendChatMessage = async (req, res) => {
     let planWasUpdated = false;
 
     // Mutate MongoDB routine if modification intent is present
-    if (currentPlan && isModificationIntent(cleanMsg)) {
-      const currentDayIndex = user.current_day_index || 1;
-      const updatedSession = await modifyWorkoutPlan(cleanMsg, currentPlan, currentDayIndex);
+    if (currentPlan && currentPlan.schedule?.length > 0 && isModificationIntent(cleanMsg)) {
+      const targetIdx = resolveTargetDayIndex(cleanMsg, currentPlan.schedule, user.current_day_index || 1);
+      const updatedSession = await modifyWorkoutPlan(cleanMsg, currentPlan, targetIdx);
 
       if (updatedSession && Array.isArray(updatedSession.exercises) && updatedSession.exercises.length > 0) {
-        const dayIdx = (currentDayIndex - 1) % currentPlan.schedule.length;
-        
-        // Update the target day's session directly
-        currentPlan.schedule[dayIdx] = updatedSession;
+        currentPlan.schedule[targetIdx] = updatedSession;
         currentPlan.markModified('schedule');
         await currentPlan.save();
         
         planWasUpdated = true;
-        console.log(`[AI WORKOUT SYNC] Day ${dayIdx + 1} of Plan ${currentPlan._id} successfully updated in MongoDB.`);
+        console.log(`[AI WORKOUT SYNC] Schedule index ${targetIdx} ("${currentPlan.schedule[targetIdx].title}") updated in MongoDB.`);
       } else {
         console.warn("[AI WORKOUT SYNC] Modification failed to parse or returned invalid exercises.");
       }
@@ -66,7 +84,7 @@ const sendChatMessage = async (req, res) => {
     if (currentPlan) {
       context = `Active Plan: "${currentPlan.title}". Current Day: ${user.current_day_index}.`;
       if (planWasUpdated) {
-        context += ` (System Status: The user's active workout plan was just successfully updated in the database with 5-6 exercises following strict kinesiology guidelines).`;
+        context += ` (System Status: The user's active workout plan was just successfully updated in the database with 5-6 verified exercises).`;
       }
     }
 
