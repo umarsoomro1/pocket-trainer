@@ -100,7 +100,6 @@ const buildDeterministicPlan = (planType) => {
   };
 };
 
-// Post-sanitizer for modified sessions to prevent LLM anatomical drift
 const sanitizeModifiedSession = (title, exercises) => {
   const t = (title || '').toLowerCase();
   const sanitized = [];
@@ -110,7 +109,7 @@ const sanitizeModifiedSession = (title, exercises) => {
     if (!ex || !ex.name) continue;
     const nameLower = ex.name.toLowerCase();
 
-    // Guard: Prevent shoulder presses/rotations on pure chest days
+    // Guard: Prevent shoulder presses on pure chest days
     if ((nameLower.includes('shoulder press') || nameLower.includes('overhead press') || nameLower.includes('rotation')) &&
         t.includes('chest') && !t.includes('push') && !t.includes('shoulder')) {
       continue;
@@ -128,7 +127,6 @@ const sanitizeModifiedSession = (title, exercises) => {
     }
   }
 
-  // Backfill if exercises dropped below 5
   let pool = EXERCISE_POOLS.Chest;
   if (t.includes('back') || t.includes('pull')) pool = EXERCISE_POOLS.Back;
   if (t.includes('shoulder')) pool = EXERCISE_POOLS.Shoulders;
@@ -172,6 +170,9 @@ const generateWorkoutPlan = async (user, planType = "Push Pull Legs (PPL)") => {
   return buildDeterministicPlan(planType);
 };
 
+/**
+ * Pure Conversational Chat -> High token headroom for complete diet/workout plans
+ */
 const generateChatResponse = async (message, user, context = '') => {
   try {
     const age = user.dob
@@ -180,16 +181,17 @@ const generateChatResponse = async (message, user, context = '') => {
 
     const prompt = `User Stats: Age ${age}, Weight ${user.weight || 150}lbs, Goal: ${user.goal || 'Hypertrophy'}. ${context}\nUser Request: "${message}"`;
     
-    const system_prompt = `You are Pocket Trainer, an expert personal fitness coach.
+    const system_prompt = `You are Pocket Trainer, an elite certified fitness trainer, sports kinesiologist, and sports nutritionist.
 Rules:
-1. Provide motivating, accurate, and scientifically sound advice.
-2. If discussing a single-muscle Chest day, recommend ONLY chest movements. Never put shoulder press, triceps, or legs on chest day.
-3. Format advice in clean markdown bullet points. Never output raw JSON.`;
+1. Provide comprehensive, motivating, clear, and medically accurate advice.
+2. When the user asks for nutrition advice, meal plans, or macro calculations, provide complete daily meal breakdowns with exact portions, calories, and macros without getting cut off.
+3. If discussing single-muscle Chest days, recommend ONLY chest movements. Never put shoulder press, triceps, or legs on chest day.
+4. Format lists and diet tables using clean markdown formatting. Never output raw JSON in chat.`;
 
     const response = await axios.post(
       MODAL_AI_URL,
-      { prompt, system_prompt, max_tokens: 450, temperature: 0.2 },
-      { headers: { 'Content-Type': 'application/json' }, timeout: 20000 }
+      { prompt, system_prompt, max_tokens: 2048, temperature: 0.25 },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 75000 }
     );
 
     return (response.data.raw_json || '').replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -199,6 +201,9 @@ Rules:
   }
 };
 
+/**
+ * Workout Session Modifier -> High token headroom for complete JSON structure
+ */
 const modifyWorkoutPlan = async (userModificationPrompt, currentPlan, targetDayIndex = 0) => {
   const currentSession = currentPlan.schedule[targetDayIndex];
 
@@ -224,8 +229,8 @@ Output strictly raw JSON without markdown tags.`;
   try {
     const response = await axios.post(
       MODAL_AI_URL,
-      { prompt, system_prompt, max_tokens: 1024, temperature: 0.1 },
-      { headers: { 'Content-Type': 'application/json' }, timeout: 30000 }
+      { prompt, system_prompt, max_tokens: 2048, temperature: 0.1 },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 75000 }
     );
 
     const parsed = safeJsonParse(response.data.raw_json || '');
