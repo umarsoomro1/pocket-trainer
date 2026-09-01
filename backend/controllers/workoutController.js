@@ -47,6 +47,47 @@ const generateAndAssignPlan = async (req, res) => {
   }
 };
 
+// @desc    Get active workout session for today (supports /active and /today)
+// @route   GET /api/workouts/active, GET /api/workouts/today
+// @access  Private
+const getTodaysWorkout = async (req, res) => {
+  try {
+    const user = req.user;
+
+    if (!user.active_program_id) {
+      return res.status(404).json({ message: 'No active plan found. Please generate one.' });
+    }
+
+    const plan = await WorkoutPlan.findById(user.active_program_id);
+    if (!plan || !plan.schedule || plan.schedule.length === 0) {
+      return res.status(404).json({ message: 'Workout plan not found in database.' });
+    }
+
+    const currentDay = user.current_day_index || 1;
+    // Modulo index allows the 1-week template to repeat across 4 weeks seamlessly
+    const scheduleIndex = (currentDay - 1) % plan.schedule.length;
+    const session = plan.schedule[scheduleIndex];
+
+    const todayDate = new Date().toISOString().split('T')[0];
+    const lastWorkout = user.last_workout_date ? new Date(user.last_workout_date).toISOString().split('T')[0] : null;
+    const isCompletedToday = lastWorkout === todayDate;
+
+    res.status(200).json({
+      planId: plan._id,
+      programTitle: plan.title,
+      currentDay,
+      totalDays: plan.schedule.length,
+      currentSession: session,
+      session,
+      isCompletedToday,
+      lastWorkoutDate: user.last_workout_date
+    });
+  } catch (error) {
+    console.error("Get Active Workout Error:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // @desc    Get dashboard progress and chart data
 // @route   GET /api/workouts/dashboard
 // @access  Private
@@ -86,52 +127,6 @@ const getDashboardData = async (req, res) => {
   }
 };
 
-// @desc    Get today's workout for the active plan
-// @route   GET /api/workouts/today
-// @access  Private
-const getTodaysWorkout = async (req, res) => {
-  try {
-    const user = req.user;
-
-    if (!user.active_program_id) {
-      return res.status(404).json({ message: 'No active plan found. Please generate one.' });
-    }
-
-    const plan = await WorkoutPlan.findById(user.active_program_id);
-    if (!plan) {
-      return res.status(404).json({ message: 'Workout plan not found in database.' });
-    }
-
-    const currentDay = user.current_day_index;
-    const session = plan.schedule[currentDay - 1];
-
-    const todayDate = new Date().toISOString().split('T')[0];
-    const lastWorkout = user.last_workout_date ? new Date(user.last_workout_date).toISOString().split('T')[0] : null;
-    const isCompletedToday = lastWorkout === todayDate;
-
-    if (!session) {
-      return res.status(200).json({ 
-        programTitle: plan.title, 
-        currentDay, 
-        totalDays: plan.schedule.length, 
-        session: null,
-        isCompletedToday
-      });
-    }
-
-    res.status(200).json({
-      programTitle: plan.title,
-      currentDay,
-      totalDays: plan.schedule.length,
-      session,
-      isCompletedToday,
-      lastWorkoutDate: user.last_workout_date
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
 // @desc    Mark today's workout as complete and advance the day index
 // @route   POST /api/workouts/complete
 // @access  Private
@@ -143,7 +138,7 @@ const completeWorkout = async (req, res) => {
       return res.status(400).json({ message: 'No active plan to complete.' });
     }
 
-    user.current_day_index += 1;
+    user.current_day_index = (user.current_day_index || 1) + 1;
     user.last_workout_date = new Date(); 
     await user.save();
 
@@ -157,5 +152,6 @@ module.exports = {
   generateAndAssignPlan, 
   getDashboardData, 
   getTodaysWorkout, 
+  getActiveWorkout: getTodaysWorkout,
   completeWorkout 
 };
