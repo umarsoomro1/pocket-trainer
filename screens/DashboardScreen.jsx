@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView, Dimensions, Modal } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,6 +6,11 @@ import { LineChart } from 'react-native-chart-kit';
 import { Calendar } from 'react-native-calendars';
 import api from '../api/axiosConfig';
 import { theme } from '../theme';
+import { 
+  registerForPushNotificationsAsync, 
+  scheduleWorkoutUnlockNotification, 
+  cancelWorkoutNotifications 
+} from '../services/notificationService';
 
 const screenWidth = Dimensions.get("window").width;
 
@@ -31,7 +36,15 @@ const DashboardScreen = ({ navigation }) => {
   const [timeRemaining, setTimeRemaining] = useState('');
   const [isCooldownActive, setIsCooldownActive] = useState(false);
 
+  // Ref tracking scheduled notification timestamps to avoid duplicate OS schedules
+  const lastScheduledDateRef = useRef(null);
+
   const planOptions = ['Push Pull Legs (PPL)', 'Single Muscle (Bro Split)', 'Upper / Lower', 'Double Muscle'];
+
+  // Initialize notifications on screen load
+  useEffect(() => {
+    registerForPushNotificationsAsync();
+  }, []);
 
   const fetchDashboard = async () => {
     try {
@@ -71,29 +84,49 @@ const DashboardScreen = ({ navigation }) => {
     todaysData?.session?.exercises.length === 0
   );
 
-  // 24-Hour Cooldown Timer Logic (Strictly for Workout Days)
+  // 24-Hour Cooldown Timer Logic & OS Notification Scheduling
   useEffect(() => {
     if (isRestDay || !todaysData?.lastWorkoutDate) {
+      setIsCooldownActive(false);
+      setTimeRemaining('');
+      lastScheduledDateRef.current = null;
+      return;
+    }
+
+    const completionTime = new Date(todaysData.lastWorkoutDate).getTime();
+    const unlockTime = completionTime + (24 * 60 * 60 * 1000); // 24-hour target
+    const now = new Date().getTime();
+    const diff = unlockTime - now;
+
+    if (diff > 0) {
+      // Schedule OS local push notification once per workout completion date
+      if (lastScheduledDateRef.current !== todaysData.lastWorkoutDate) {
+        lastScheduledDateRef.current = todaysData.lastWorkoutDate;
+        scheduleWorkoutUnlockNotification(
+          todaysData.lastWorkoutDate,
+          (todaysData.currentDay || 1) + 1
+        );
+      }
+    } else {
       setIsCooldownActive(false);
       setTimeRemaining('');
       return;
     }
 
+    // Run active countdown interval
     const interval = setInterval(() => {
-      const completionTime = new Date(todaysData.lastWorkoutDate).getTime();
-      const unlockTime = completionTime + (24 * 60 * 60 * 1000); // 24-hour target
-      const now = new Date().getTime();
-      const diff = unlockTime - now;
+      const currentNow = new Date().getTime();
+      const currentDiff = unlockTime - currentNow;
 
-      if (diff <= 0) {
+      if (currentDiff <= 0) {
         setIsCooldownActive(false);
         setTimeRemaining('');
         clearInterval(interval);
       } else {
         setIsCooldownActive(true);
-        const h = Math.floor(diff / (1000 * 60 * 60));
-        const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-        const s = Math.floor((diff % (1000 * 60)) / 1000);
+        const h = Math.floor(currentDiff / (1000 * 60 * 60));
+        const m = Math.floor((currentDiff % (1000 * 60 * 60)) / (1000 * 60));
+        const s = Math.floor((currentDiff % (1000 * 60)) / 1000);
         setTimeRemaining(`${h}h ${m}m ${s}s`);
       }
     }, 1000);
@@ -119,6 +152,7 @@ const DashboardScreen = ({ navigation }) => {
   const handleLogRestDay = async () => {
     setIsAdvancingRest(true);
     try {
+      await cancelWorkoutNotifications();
       await api.post('/workouts/complete');
       Alert.alert("Recovery Logged", "Rest day completed. You are ready for your next session!");
       fetchDashboard();
