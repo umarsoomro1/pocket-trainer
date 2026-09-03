@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { sendPasswordResetEmail } = require('../services/emailService');
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'secretkey', { expiresIn: '30d' });
@@ -64,29 +65,38 @@ const loginUser = async (req, res) => {
   }
 };
 
-// @desc    Request password reset code
+// @desc    Request password reset code & dispatch email
 // @route   POST /api/auth/forgot-password
 const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
-    const user = await User.findOne({ email: email?.toLowerCase() });
+    if (!email) {
+      return res.status(400).json({ message: 'Please provide an email address.' });
+    }
 
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+
+    // Anti-enumeration: Return identical message even if user doesn't exist
     if (!user) {
       return res.status(200).json({ message: 'If that email is registered, a reset code was sent.' });
     }
 
+    // 1. Generate 6-digit OTP code
     const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedCode = crypto.createHash('sha256').update(resetCode).digest('hex');
 
+    // 2. Persist hash and 15-minute expiration
     user.resetPasswordToken = hashedCode;
     user.resetPasswordExpires = Date.now() + 15 * 60 * 1000;
     await user.save();
 
-    console.log(`[DEV ONLY] Password Reset OTP for ${user.email}: ${resetCode}`);
+    // 3. Send email to recipient via Nodemailer
+    await sendPasswordResetEmail(user.email, resetCode);
 
     res.status(200).json({ message: 'Reset code sent to your email.' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Password reset dispatch error:', error);
+    res.status(500).json({ message: 'Failed to dispatch reset email. Please try again.' });
   }
 };
 
@@ -103,7 +113,7 @@ const resetPassword = async (req, res) => {
     const hashedCode = crypto.createHash('sha256').update(code.trim()).digest('hex');
 
     const user = await User.findOne({
-      email: email.toLowerCase(),
+      email: email.toLowerCase().trim(),
       resetPasswordToken: hashedCode,
       resetPasswordExpires: { $gt: Date.now() },
     });
