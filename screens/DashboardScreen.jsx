@@ -14,6 +14,9 @@ import {
 
 const screenWidth = Dimensions.get("window").width;
 
+// PRODUCTION COOLDOWN: 24 Hours
+const COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
 const DashboardScreen = ({ navigation }) => {
   const [todaysData, setTodaysData] = useState(null);
   const [progressStats, setProgressStats] = useState(null);
@@ -36,12 +39,10 @@ const DashboardScreen = ({ navigation }) => {
   const [timeRemaining, setTimeRemaining] = useState('');
   const [isCooldownActive, setIsCooldownActive] = useState(false);
 
-  // Ref tracking scheduled notification timestamps to avoid duplicate OS schedules
   const lastScheduledDateRef = useRef(null);
 
   const planOptions = ['Push Pull Legs (PPL)', 'Single Muscle (Bro Split)', 'Upper / Lower', 'Double Muscle'];
 
-  // Initialize notifications on screen load
   useEffect(() => {
     registerForPushNotificationsAsync();
   }, []);
@@ -56,9 +57,22 @@ const DashboardScreen = ({ navigation }) => {
       ]);
 
       if (todayRes) setTodaysData(todayRes.data);
-      if (dashRes) {
+      if (dashRes && dashRes.data) {
         setProgressStats(dashRes.data.stats);
-        setChartData(dashRes.data.chartData);
+
+        const rawChart = dashRes.data.chartData;
+        if (rawChart && Array.isArray(rawChart.datasets) && rawChart.datasets[0]?.data?.length > 0) {
+          // If user only has 1 data point, provide a clean baseline so the chart scales naturally
+          if (rawChart.datasets[0].data.length === 1) {
+            const singleVal = rawChart.datasets[0].data[0];
+            setChartData({
+              labels: ["Start", "Current"],
+              datasets: [{ data: [singleVal, singleVal] }]
+            });
+          } else {
+            setChartData(rawChart);
+          }
+        }
       }
     } catch (error) {
       Alert.alert("Error", "Could not load dashboard.");
@@ -73,7 +87,6 @@ const DashboardScreen = ({ navigation }) => {
     }, [])
   );
 
-  // Check if today is designated as a Rest / Recovery Day
   const isRestDay = Boolean(
     todaysData?.session?.isRestDay || 
     todaysData?.session?.type?.toLowerCase().includes('recovery') ||
@@ -84,7 +97,7 @@ const DashboardScreen = ({ navigation }) => {
     todaysData?.session?.exercises.length === 0
   );
 
-  // 24-Hour Cooldown Timer Logic & OS Notification Scheduling
+  // 24-Hour Cooldown Timer Logic
   useEffect(() => {
     if (isRestDay || !todaysData?.lastWorkoutDate) {
       setIsCooldownActive(false);
@@ -94,12 +107,11 @@ const DashboardScreen = ({ navigation }) => {
     }
 
     const completionTime = new Date(todaysData.lastWorkoutDate).getTime();
-    const unlockTime = completionTime + (24 * 60 * 60 * 1000); // 24-hour target
+    const unlockTime = completionTime + COOLDOWN_MS;
     const now = new Date().getTime();
     const diff = unlockTime - now;
 
     if (diff > 0) {
-      // Schedule OS local push notification once per workout completion date
       if (lastScheduledDateRef.current !== todaysData.lastWorkoutDate) {
         lastScheduledDateRef.current = todaysData.lastWorkoutDate;
         scheduleWorkoutUnlockNotification(
@@ -113,7 +125,6 @@ const DashboardScreen = ({ navigation }) => {
       return;
     }
 
-    // Run active countdown interval
     const interval = setInterval(() => {
       const currentNow = new Date().getTime();
       const currentDiff = unlockTime - currentNow;
@@ -122,6 +133,7 @@ const DashboardScreen = ({ navigation }) => {
         setIsCooldownActive(false);
         setTimeRemaining('');
         clearInterval(interval);
+        fetchDashboard();
       } else {
         setIsCooldownActive(true);
         const h = Math.floor(currentDiff / (1000 * 60 * 60));
@@ -148,7 +160,6 @@ const DashboardScreen = ({ navigation }) => {
     }
   };
 
-  // Instant Rest Day advancement without blocking
   const handleLogRestDay = async () => {
     setIsAdvancingRest(true);
     try {
@@ -224,21 +235,26 @@ const DashboardScreen = ({ navigation }) => {
           />
         </View>
 
-        {chartData && (
+        {/* DYNAMIC PROGRESSIVE WEIGHT CHART */}
+        {chartData && chartData.datasets?.[0]?.data?.length > 0 && (
           <View style={{ marginBottom: 30 }}>
             <Text style={styles.sectionHeader}>Weight Progress (lbs)</Text>
             <LineChart
               data={chartData}
               width={screenWidth - 40}
               height={220}
+              yAxisSuffix=" lb"
+              fromZero={false}
+              segments={4}
               chartConfig={{
                 backgroundColor: theme.card,
                 backgroundGradientFrom: theme.card,
                 backgroundGradientTo: theme.card,
                 decimalPlaces: 1,
                 color: (opacity = 1) => `rgba(0, 255, 127, ${opacity})`,
-                labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-                propsForDots: { r: "5", strokeWidth: "2", stroke: theme.accentAlt }
+                labelColor: (opacity = 1) => `rgba(161, 161, 170, ${opacity})`,
+                propsForDots: { r: "5", strokeWidth: "2", stroke: theme.accentAlt },
+                propsForBackgroundLines: { stroke: "#27272a", strokeDasharray: "4" }
               }}
               bezier
               style={{ borderRadius: 16, elevation: 4 }}
@@ -255,7 +271,6 @@ const DashboardScreen = ({ navigation }) => {
               <View style={styles.divider} />
               <Text style={styles.sessionTitle}>{todaysData.session.title}</Text>
               
-              {/* REST DAY VIEW WITH ADVANCE BUTTON */}
               {isRestDay ? (
                 <View style={styles.restDayContainer}>
                   <Ionicons name="bed" size={36} color={theme.accentAlt} />
@@ -278,13 +293,11 @@ const DashboardScreen = ({ navigation }) => {
                   </TouchableOpacity>
                 </View>
               ) : isCooldownActive ? (
-                /* 24-HOUR COOLDOWN ACTIVE */
                 <View style={styles.disabledButton}>
                   <Text style={styles.disabledButtonText}>Workout Complete!</Text>
                   <Text style={styles.timerText}>Next session unlocks in {timeRemaining}</Text>
                 </View>
               ) : (
-                /* START WORKOUT BUTTON */
                 <TouchableOpacity 
                   style={styles.startButton} 
                   onPress={() => navigation.navigate('ActiveWorkout', { sessionData: todaysData.session })}
@@ -380,12 +393,10 @@ const styles = StyleSheet.create({
   startButton: { flexDirection: 'row', backgroundColor: theme.accent, paddingVertical: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 25 },
   startButtonText: { color: theme.background, fontSize: 18, fontWeight: 'bold' },
   
-  // Disabled Button & Timer Styles
   disabledButton: { backgroundColor: '#333', paddingVertical: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 25 },
   disabledButtonText: { color: theme.textSecondary, fontSize: 16, fontWeight: 'bold' },
   timerText: { color: theme.accentAlt, fontSize: 14, marginTop: 4, fontWeight: '600' },
 
-  // Rest Day Display Styles
   restDayContainer: { alignItems: 'center', paddingVertical: 16, marginTop: 5 },
   restDayText: { color: theme.accentAlt, fontSize: 18, fontWeight: 'bold', marginTop: 8 },
   restDaySubtext: { color: theme.textSecondary, fontSize: 14, textAlign: 'center', marginTop: 4, marginBottom: 15 },
@@ -395,7 +406,6 @@ const styles = StyleSheet.create({
   generateButton: { flexDirection: 'row', backgroundColor: theme.accentAlt, paddingVertical: 16, paddingHorizontal: 30, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 25 },
   generateButtonText: { color: theme.background, fontSize: 18, fontWeight: 'bold' },
 
-  // Modal Styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: theme.card, borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 25, paddingBottom: 40 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },

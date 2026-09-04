@@ -26,12 +26,16 @@ const registerUser = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
+    const numericWeight = weight ? Number(weight) : undefined;
+
     const user = await User.create({
       email: email.toLowerCase(),
       password: hashedPassword,
       dob,
-      weight,
+      weight: numericWeight,
       goal,
+      // Seed initial history point so line charts have a baseline immediately
+      weightHistory: numericWeight ? [{ weight: numericWeight, date: new Date() }] : []
     });
 
     res.status(201).json({
@@ -149,14 +153,28 @@ const getUserProfile = async (req, res) => {
   }
 };
 
-// @desc    Update user profile biometrics
+// @desc    Update user profile biometrics & record weight tracking history
 // @route   PUT /api/auth/profile
 const updateUserProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ message: 'User not found.' });
 
-    if (req.body.weight) user.weight = req.body.weight;
+    if (req.body.weight !== undefined && req.body.weight !== null && req.body.weight !== '') {
+      const numericWeight = Number(req.body.weight);
+      user.weight = numericWeight;
+
+      if (!Array.isArray(user.weightHistory)) {
+        user.weightHistory = [];
+      }
+
+      // Record a new chronological data point
+      user.weightHistory.push({
+        weight: numericWeight,
+        date: new Date()
+      });
+    }
+
     if (req.body.goal) user.goal = req.body.goal;
     if (req.body.dob) user.dob = req.body.dob;
 
