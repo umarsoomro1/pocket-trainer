@@ -2,7 +2,7 @@ const axios = require('axios');
 
 const MODAL_AI_URL = process.env.MODAL_AI_URL;
 
-// Canonical verified exercise pools for all muscle groups
+// Canonical verified exercise pools for all muscle groups including Core / Abs
 const EXERCISE_POOLS = {
   Chest: [
     { name: "Barbell Bench Press", sets: 4, reps_target: "8-10", rest_seconds: 90, muscle: "Chest", benefits: "Primary pectoral compound builder" },
@@ -42,60 +42,66 @@ const EXERCISE_POOLS = {
     { name: "Skull Crushers", sets: 3, reps_target: "10-12", rest_seconds: 60, muscle: "Triceps", benefits: "Tricep long-head mass" },
     { name: "Triceps Rope Pushdown", sets: 3, reps_target: "12-15", rest_seconds: 45, muscle: "Triceps", benefits: "Lateral head lockout tension" },
     { name: "Overhead Tricep Extension", sets: 3, reps_target: "10-12", rest_seconds: 60, muscle: "Triceps", benefits: "Tricep stretch under load" }
+  ],
+  Core: [
+    { name: "Hanging Leg Raise", sets: 3, reps_target: "12-15", rest_seconds: 60, muscle: "Abs", benefits: "Lower abdominal compression and hip flexors" },
+    { name: "Cable Kneeling Crunch", sets: 3, reps_target: "15-20", rest_seconds: 60, muscle: "Abs", benefits: "Upper abdominal progressive overload" },
+    { name: "Ab Wheel Rollout", sets: 3, reps_target: "10-12", rest_seconds: 60, muscle: "Abs", benefits: "Anti-extension core stabilization" },
+    { name: "Plank to Push-Up", sets: 3, reps_target: "45-60s", rest_seconds: 45, muscle: "Abs", benefits: "Isometric core endurance and stability" }
   ]
 };
 
-// Deterministic Plan Builder for all 4 Splits
+// Deterministic Plan Builder for all 4 Splits with alternating Abs programming
 const buildDeterministicPlan = (planType) => {
   const type = (planType || '').toLowerCase();
 
-  // 1. Single Muscle (Bro Split)
+  // 1. Single Muscle (Bro Split) - Abs on Day 2 (Back) and Day 4 (Legs)
   if (type.includes('bro') || type.includes('single')) {
     return {
       title: "5-Day Single Muscle Hypertrophy Split",
       schedule: [
-        { title: "Day 1 - Chest", type: "Strength", exercises: EXERCISE_POOLS.Chest.slice(0, 6) },
-        { title: "Day 2 - Back", type: "Strength", exercises: EXERCISE_POOLS.Back.slice(0, 6) },
+        { title: "Day 1 - Chest", type: "Strength", exercises: EXERCISE_POOLS.Chest.slice(0, 5) },
+        { title: "Day 2 - Back & Abs", type: "Strength", exercises: [...EXERCISE_POOLS.Back.slice(0, 4), EXERCISE_POOLS.Core[0]] },
         { title: "Day 3 - Shoulders", type: "Strength", exercises: EXERCISE_POOLS.Shoulders.slice(0, 5) },
-        { title: "Day 4 - Legs", type: "Strength", exercises: EXERCISE_POOLS.Legs.slice(0, 6) },
+        { title: "Day 4 - Legs & Abs", type: "Strength", exercises: [...EXERCISE_POOLS.Legs.slice(0, 4), EXERCISE_POOLS.Core[1]] },
         { title: "Day 5 - Arms", type: "Strength", exercises: EXERCISE_POOLS.Arms.slice(0, 6) }
       ]
     };
   }
 
-  // 2. Double Muscle Split
+  // 2. Double Muscle Split - Abs on Day 1 (Chest & Biceps) and Day 3 (Shoulders & Abs)
   if (type.includes('double')) {
     return {
       title: "4-Day Double Muscle Hypertrophy Split",
       schedule: [
-        { title: "Day 1 - Chest & Biceps", type: "Strength", exercises: [...EXERCISE_POOLS.Chest.slice(0, 3), ...EXERCISE_POOLS.Arms.slice(0, 3)] },
+        { title: "Day 1 - Chest, Biceps & Abs", type: "Strength", exercises: [...EXERCISE_POOLS.Chest.slice(0, 3), ...EXERCISE_POOLS.Arms.slice(0, 2), EXERCISE_POOLS.Core[0]] },
         { title: "Day 2 - Back & Triceps", type: "Strength", exercises: [...EXERCISE_POOLS.Back.slice(0, 3), ...EXERCISE_POOLS.Arms.slice(3, 6)] },
-        { title: "Day 3 - Shoulders & Abs", type: "Strength", exercises: EXERCISE_POOLS.Shoulders.slice(0, 5) },
-        { title: "Day 4 - Legs", type: "Strength", exercises: EXERCISE_POOLS.Legs.slice(0, 6) }
+        { title: "Day 3 - Shoulders & Abs", type: "Strength", exercises: [...EXERCISE_POOLS.Shoulders.slice(0, 4), EXERCISE_POOLS.Core[1]] },
+        { title: "Day 4 - Legs", type: "Strength", exercises: EXERCISE_POOLS.Legs.slice(0, 5) }
       ]
     };
   }
 
-  // 3. Upper / Lower Split
+  // 3. Upper / Lower Split - Abs on Lower Body days to keep upper compound capacity peak
   if (type.includes('upper') || type.includes('lower')) {
     return {
       title: "4-Day Upper / Lower Split",
       schedule: [
         { title: "Day 1 - Upper Body (Power)", type: "Strength", exercises: [EXERCISE_POOLS.Chest[0], EXERCISE_POOLS.Back[1], EXERCISE_POOLS.Shoulders[0], EXERCISE_POOLS.Back[2], EXERCISE_POOLS.Arms[0], EXERCISE_POOLS.Arms[3]] },
-        { title: "Day 2 - Lower Body (Power)", type: "Strength", exercises: EXERCISE_POOLS.Legs.slice(0, 6) },
+        { title: "Day 2 - Lower Body & Abs (Power)", type: "Strength", exercises: [...EXERCISE_POOLS.Legs.slice(0, 4), EXERCISE_POOLS.Core[0]] },
         { title: "Day 3 - Upper Body (Hypertrophy)", type: "Strength", exercises: [EXERCISE_POOLS.Chest[1], EXERCISE_POOLS.Chest[3], EXERCISE_POOLS.Back[3], EXERCISE_POOLS.Shoulders[1], EXERCISE_POOLS.Arms[1], EXERCISE_POOLS.Arms[4]] },
-        { title: "Day 4 - Lower Body (Hypertrophy)", type: "Strength", exercises: [EXERCISE_POOLS.Legs[1], EXERCISE_POOLS.Legs[2], EXERCISE_POOLS.Legs[3], EXERCISE_POOLS.Legs[4], EXERCISE_POOLS.Legs[5]] }
+        { title: "Day 4 - Lower Body & Abs (Hypertrophy)", type: "Strength", exercises: [EXERCISE_POOLS.Legs[1], EXERCISE_POOLS.Legs[2], EXERCISE_POOLS.Legs[3], EXERCISE_POOLS.Legs[4], EXERCISE_POOLS.Core[2]] }
       ]
     };
   }
 
-  // 4. Default: Push / Pull / Legs (PPL)
+  // 4. Default: Push / Pull / Legs (PPL) - Abs alternate on Pull and Legs
   return {
     title: "Push Pull Legs (PPL) Split",
     schedule: [
       { title: "Day 1 - Push", type: "Strength", exercises: [EXERCISE_POOLS.Chest[0], EXERCISE_POOLS.Chest[1], EXERCISE_POOLS.Chest[3], EXERCISE_POOLS.Shoulders[0], EXERCISE_POOLS.Arms[3], EXERCISE_POOLS.Arms[4]] },
-      { title: "Day 2 - Pull", type: "Strength", exercises: [EXERCISE_POOLS.Back[0], EXERCISE_POOLS.Back[1], EXERCISE_POOLS.Back[2], EXERCISE_POOLS.Back[4], EXERCISE_POOLS.Arms[0], EXERCISE_POOLS.Arms[1]] },
-      { title: "Day 3 - Legs", type: "Strength", exercises: EXERCISE_POOLS.Legs.slice(0, 6) }
+      { title: "Day 2 - Pull & Abs", type: "Strength", exercises: [EXERCISE_POOLS.Back[0], EXERCISE_POOLS.Back[1], EXERCISE_POOLS.Back[2], EXERCISE_POOLS.Arms[0], EXERCISE_POOLS.Arms[1], EXERCISE_POOLS.Core[0]] },
+      { title: "Day 3 - Legs & Abs", type: "Strength", exercises: [EXERCISE_POOLS.Legs[0], EXERCISE_POOLS.Legs[1], EXERCISE_POOLS.Legs[2], EXERCISE_POOLS.Legs[4], EXERCISE_POOLS.Legs[5], EXERCISE_POOLS.Core[1]] }
     ]
   };
 };
@@ -109,8 +115,8 @@ const sanitizeModifiedSession = (title, exercises) => {
     if (!ex || !ex.name) continue;
     const nameLower = ex.name.toLowerCase();
 
-    // Guard: Prevent shoulder presses on pure chest days
-    if ((nameLower.includes('shoulder press') || nameLower.includes('overhead press') || nameLower.includes('rotation')) &&
+    // Guard: Prevent shoulder presses on pure chest bro-split days
+    if ((nameLower.includes('shoulder press') || nameLower.includes('overhead press')) &&
         t.includes('chest') && !t.includes('push') && !t.includes('shoulder')) {
       continue;
     }
@@ -121,12 +127,13 @@ const sanitizeModifiedSession = (title, exercises) => {
       continue;
     }
 
-    if (!seen.has(ex.name)) {
-      seen.add(ex.name);
+    if (!seen.has(ex.name.toLowerCase())) {
+      seen.add(ex.name.toLowerCase());
       sanitized.push(ex);
     }
   }
 
+  // Determine fallback muscle pool
   let pool = EXERCISE_POOLS.Chest;
   if (t.includes('back') || t.includes('pull')) pool = EXERCISE_POOLS.Back;
   if (t.includes('shoulder')) pool = EXERCISE_POOLS.Shoulders;
@@ -135,9 +142,9 @@ const sanitizeModifiedSession = (title, exercises) => {
 
   let idx = 0;
   while (sanitized.length < 5 && idx < pool.length) {
-    if (!seen.has(pool[idx].name)) {
+    if (!seen.has(pool[idx].name.toLowerCase())) {
       sanitized.push(pool[idx]);
-      seen.add(pool[idx].name);
+      seen.add(pool[idx].name.toLowerCase());
     }
     idx++;
   }
@@ -146,6 +153,7 @@ const sanitizeModifiedSession = (title, exercises) => {
 };
 
 const safeJsonParse = (str) => {
+  if (!str) return null;
   let cleaned = str.replace(/```json/gi, '').replace(/```/g, '').trim();
   const firstBrace = cleaned.indexOf('{');
   const lastBrace = cleaned.lastIndexOf('}');
@@ -171,7 +179,7 @@ const generateWorkoutPlan = async (user, planType = "Push Pull Legs (PPL)") => {
 };
 
 /**
- * Pure Conversational Chat -> High token headroom for complete diet/workout plans
+ * Conversational Chat Handler
  */
 const generateChatResponse = async (message, user, context = '') => {
   try {
@@ -179,14 +187,14 @@ const generateChatResponse = async (message, user, context = '') => {
       ? Math.abs(new Date(Date.now() - new Date(user.dob).getTime()).getUTCFullYear() - 1970)
       : 25;
 
-    const prompt = `User Stats: Age ${age}, Weight ${user.weight || 150}lbs, Goal: ${user.goal || 'Hypertrophy'}. ${context}\nUser Request: "${message}"`;
+    const prompt = `User Stats: Age ${age}, Weight ${user.weight || 150}lbs, Goal: ${user.goal || 'Hypertrophy'}. ${context}\nUser Message: "${message}"`;
     
     const system_prompt = `You are Pocket Trainer, an elite certified fitness trainer, sports kinesiologist, and sports nutritionist.
 Rules:
-1. Provide comprehensive, motivating, clear, and medically accurate advice.
-2. When the user asks for nutrition advice, meal plans, or macro calculations, provide complete daily meal breakdowns with exact portions, calories, and macros without getting cut off.
-3. If discussing single-muscle Chest days, recommend ONLY chest movements. Never put shoulder press, triceps, or legs on chest day.
-4. Format lists and diet tables using clean markdown formatting. Never output raw JSON in chat.`;
+1. Provide comprehensive, motivating, clear, and medically sound guidance.
+2. For nutrition requests, provide exact meal breakdowns, gram-level macros, and timing advice.
+3. If the user successfully modified an exercise, congratulate them and summarize the update briefly.
+4. Format responses cleanly in markdown. Do NOT wrap conversational advice in JSON blocks.`;
 
     const response = await axios.post(
       MODAL_AI_URL,
@@ -202,29 +210,40 @@ Rules:
 };
 
 /**
- * Workout Session Modifier -> High token headroom for complete JSON structure
+ * Robust Workout Session Modifier via Modal LLM
  */
 const modifyWorkoutPlan = async (userModificationPrompt, currentPlan, targetDayIndex = 0) => {
   const currentSession = currentPlan.schedule[targetDayIndex];
+  if (!currentSession) return null;
 
-  const prompt = `Current Session to Modify: ${JSON.stringify(currentSession)}\nUser Request: "${userModificationPrompt}"\nProvide 5 to 6 valid exercises adhering strictly to the muscle focus.`;
+  const prompt = `CURRENT SESSION TITLE: "${currentSession.title}"
+EXISTING EXERCISES:
+${JSON.stringify(currentSession.exercises, null, 2)}
 
-  const system_prompt = `You are PocketTrainer AI routine architect. Output ONLY valid raw JSON for this session:
+USER MODIFICATION REQUEST:
+"${userModificationPrompt}"
+
+INSTRUCTIONS:
+Update the exercises array by executing the user request (swap, add, remove, or substitute).
+Keep 5 to 6 balanced exercises. Retain any existing exercises that were not targeted for change.`;
+
+  const system_prompt = `You are PocketTrainer AI routine architect.
+Return ONLY valid JSON matching this schema:
 {
-  "title": "${currentSession?.title || 'Session'}",
+  "title": "${currentSession.title}",
   "type": "Strength",
   "exercises": [
     {
-      "name": "Barbell Bench Press",
+      "name": "Exercise Name",
       "sets": 4,
-      "reps_target": "8-10",
-      "rest_seconds": 90,
-      "muscle": "Chest",
-      "benefits": "Primary chest builder"
+      "reps_target": "8-12",
+      "rest_seconds": 60,
+      "muscle": "Target Muscle",
+      "benefits": "Brief physiological benefit"
     }
   ]
 }
-Output strictly raw JSON without markdown tags.`;
+Output strictly raw JSON without explanations or markdown tags.`;
 
   try {
     const response = await axios.post(
@@ -234,14 +253,23 @@ Output strictly raw JSON without markdown tags.`;
     );
 
     const parsed = safeJsonParse(response.data.raw_json || '');
-    if (parsed && Array.isArray(parsed.exercises)) {
-      parsed.exercises = sanitizeModifiedSession(parsed.title || currentSession.title, parsed.exercises);
+    if (parsed && Array.isArray(parsed.exercises) && parsed.exercises.length > 0) {
+      parsed.title = currentSession.title;
+      parsed.type = currentSession.type || "Strength";
+      parsed.exercises = sanitizeModifiedSession(currentSession.title, parsed.exercises);
+      return parsed;
     }
-    return parsed;
+
+    return null;
   } catch (error) {
     console.error("Modify Workout AI Error:", error.response?.data || error.message);
     return null;
   }
 };
 
-module.exports = { generateWorkoutPlan, generateChatResponse, modifyWorkoutPlan };
+module.exports = { 
+  EXERCISE_POOLS,
+  generateWorkoutPlan, 
+  generateChatResponse, 
+  modifyWorkoutPlan 
+};

@@ -13,7 +13,7 @@ const generateAndAssignPlan = async (req, res) => {
 
     console.log(`[GENERATION START] User: ${user._id} | Split: ${planType || 'General'}`);
 
-    // 1. Get structured baseline plan (Instant & 100% anatomically sound)
+    // 1. Get structured baseline plan with built-in alternating core exercises
     const generatedData = await generateWorkoutPlan(user, planType || "Push Pull Legs (PPL)");
 
     if (!generatedData || !Array.isArray(generatedData.schedule) || generatedData.schedule.length === 0) {
@@ -22,7 +22,7 @@ const generateAndAssignPlan = async (req, res) => {
       });
     }
 
-    // 2. Fetch exercise demonstration GIFs (non-blocking, parallel with 1.5s timeout)
+    // 2. Fetch exercise demonstration GIFs (parallel non-blocking with 1.5s timeout)
     const gifPromises = [];
     generatedData.schedule.forEach((day) => {
       (day.exercises || []).forEach((exercise) => {
@@ -85,7 +85,7 @@ const getTodaysWorkout = async (req, res) => {
     }
 
     const currentDay = user.current_day_index || 1;
-    // Modulo index allows repeating master splits across 4 weeks
+    // Modulo index allows repeating master splits across multiple weeks
     const scheduleIndex = (currentDay - 1) % plan.schedule.length;
     const session = plan.schedule[scheduleIndex];
 

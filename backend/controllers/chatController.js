@@ -1,27 +1,30 @@
 const ChatMessage = require('../models/ChatMessage');
 const WorkoutPlan = require('../models/WorkoutPlan');
 const { generateChatResponse, modifyWorkoutPlan } = require('../services/aiService');
+const { getExerciseGif } = require('../services/exerciseService');
 
-// Strict Action-Verb intent detection
+// Broad, natural intent detection for routine mutations
 const isModificationIntent = (text) => {
   const clean = text.trim().toLowerCase();
 
-  // 1. Immediately ignore read-only / informational questions
-  const isQuestion = /^(what|how|show|view|tell me|explain|can you explain|list|describe|preview)\b/i.test(clean);
-  if (isQuestion && !/(change|replace|swap|update|modify|substitute|switch|remove|delete|add)/i.test(clean)) {
+  // 1. Immediately ignore read-only / informational queries
+  const isReadOnly = /^(what|how|show|view|tell me|explain|can you explain|list|describe|preview)\b/i.test(clean);
+  const containsMutationVerb = /\b(change|replace|swap|update|modify|substitute|switch|remove|delete|add|put|insert|give me abs|include abs)\b/i.test(clean);
+  
+  if (isReadOnly && !containsMutationVerb) {
     return false;
   }
 
-  // 2. Only trigger if explicit mutation action verbs are present
-  const mutationActionRegex = /\b(change|modify|update|adjust|switch|replace|swap|substitute|remove|delete|add)\b/i;
+  // 2. Trigger if any mutation verb or exercise swap phrase is present
+  const mutationActionRegex = /\b(change|modify|update|adjust|switch|replace|swap|substitute|remove|delete|add|put|instead of|to my workout|in my workout|to day)\b/i;
   return mutationActionRegex.test(clean);
 };
 
-// Determines which schedule day the user is targeting in their message
+// Resolves which schedule day the user is targeting
 const resolveTargetDayIndex = (text, schedule, currentDayIndex) => {
   const lower = text.toLowerCase();
 
-  // Check explicit day numbers first (e.g., "day 2", "day 3")
+  // 1. Explicit Day Number (e.g. "day 2", "day 3")
   const dayMatch = lower.match(/day\s*(\d+)/i);
   if (dayMatch && dayMatch[1]) {
     const parsedDay = parseInt(dayMatch[1], 10);
@@ -29,8 +32,8 @@ const resolveTargetDayIndex = (text, schedule, currentDayIndex) => {
       return parsedDay - 1;
     }
   }
-  
-  // Check muscle names in prompt (e.g. "chest", "back", "leg", "push", "pull", "arm", "shoulder")
+
+  // 2. Explicit Muscle Target
   for (let i = 0; i < schedule.length; i++) {
     const titleLower = schedule[i].title.toLowerCase();
     if (lower.includes('chest') && titleLower.includes('chest')) return i;
@@ -42,7 +45,7 @@ const resolveTargetDayIndex = (text, schedule, currentDayIndex) => {
     if (lower.includes('pull') && titleLower.includes('pull')) return i;
   }
 
-  // Fallback to active day
+  // 3. Fallback to user's currently active day index
   return (currentDayIndex - 1) % schedule.length;
 };
 
@@ -58,7 +61,7 @@ const getChatHistory = async (req, res) => {
   }
 };
 
-// @desc    Send message to AI, conditionally update DB on strict mutation intent, save history
+// @desc    Send message to AI, conditionally update DB on routine changes, record chat
 // @route   POST /api/chat
 // @access  Private
 const sendChatMessage = async (req, res) => {
@@ -80,34 +83,54 @@ const sendChatMessage = async (req, res) => {
 
     let planWasUpdated = false;
 
-    // Mutate MongoDB routine ONLY if strict modification action intent is present
+    // Mutate MongoDB routine if modification intent is detected
     if (currentPlan && currentPlan.schedule?.length > 0 && isModificationIntent(cleanMsg)) {
       const targetIdx = resolveTargetDayIndex(cleanMsg, currentPlan.schedule, user.current_day_index || 1);
       const updatedSession = await modifyWorkoutPlan(cleanMsg, currentPlan, targetIdx);
 
       if (updatedSession && Array.isArray(updatedSession.exercises) && updatedSession.exercises.length > 0) {
+        // Fetch demonstration GIFs for any newly introduced exercises in parallel
+        const gifLookups = updatedSession.exercises.map(async (ex) => {
+          const oldEx = currentPlan.schedule[targetIdx].exercises.find(
+            e => e.name.toLowerCase() === ex.name.toLowerCase()
+          );
+          if (oldEx && oldEx.gif_url) {
+            ex.gif_url = oldEx.gif_url;
+          } else {
+            try {
+              const fetchPromise = getExerciseGif(ex.name);
+              const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 1500));
+              ex.gif_url = await Promise.race([fetchPromise, timeoutPromise]);
+            } catch (e) {
+              ex.gif_url = null;
+            }
+          }
+        });
+
+        await Promise.allSettled(gifLookups);
+
         currentPlan.schedule[targetIdx] = updatedSession;
         currentPlan.markModified('schedule');
         await currentPlan.save();
-        
+
         planWasUpdated = true;
         console.log(`[AI WORKOUT SYNC] Schedule index ${targetIdx} ("${currentPlan.schedule[targetIdx].title}") updated in MongoDB.`);
       } else {
-        console.warn("[AI WORKOUT SYNC] Modification failed to parse or returned invalid exercises.");
+        console.warn("[AI WORKOUT SYNC] Model did not return a valid replacement session structure.");
       }
     }
 
-    // Build context for conversational reply
+    // Build context for conversational LLM
     let context = '';
     if (currentPlan) {
       const fullScheduleSummary = currentPlan.schedule
         .map((s, idx) => `Day ${idx + 1}: ${s.title} (${(s.exercises || []).map(e => e.name).join(', ')})`)
         .join(' | ');
 
-      context = `Active Plan: "${currentPlan.title}". Current Active Day: Day ${user.current_day_index}. Full Plan Outline: [${fullScheduleSummary}].`;
+      context = `Active Plan: "${currentPlan.title}". Current Day: Day ${user.current_day_index}. Schedule: [${fullScheduleSummary}].`;
 
       if (planWasUpdated) {
-        context += ` (System Status: The user's active workout plan was just successfully updated in the database).`;
+        context += ` (System Status: The database was just updated to reflect the user's requested exercise change).`;
       }
     }
 
