@@ -3,6 +3,9 @@ const WorkoutPlan = require('../models/WorkoutPlan');
 const { generateChatResponse, modifyWorkoutPlan } = require('../services/aiService');
 const { getExerciseGif } = require('../services/exerciseService');
 
+// F7: Prompt length constraint
+const MAX_MESSAGE_LENGTH = 500;
+
 // Broad, natural intent detection for routine mutations
 const isModificationIntent = (text) => {
   const clean = text.trim().toLowerCase();
@@ -49,22 +52,28 @@ const resolveTargetDayIndex = (text, schedule, currentDayIndex) => {
   return (currentDayIndex - 1) % schedule.length;
 };
 
-// @desc    Get user's chat history
+// @desc    Get user's chat history (bounded to last 50 items)
 // @route   GET /api/chat
 // @access  Private
-const getChatHistory = async (req, res) => {
+const getChatHistory = async (req, res, next) => {
   try {
-    const messages = await ChatMessage.find({ userId: req.user._id }).sort({ createdAt: 1 });
-    res.status(200).json(messages);
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+    
+    // Fetch newest messages first up to limit, then reverse to restore chronological reading order
+    const messages = await ChatMessage.find({ userId: req.user._id })
+      .sort({ createdAt: -1 })
+      .limit(limit);
+
+    res.status(200).json(messages.reverse());
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // @desc    Send message to AI, conditionally update DB on routine changes, record chat
 // @route   POST /api/chat
 // @access  Private
-const sendChatMessage = async (req, res) => {
+const sendChatMessage = async (req, res, next) => {
   try {
     const { message } = req.body;
     const user = req.user;
@@ -74,6 +83,14 @@ const sendChatMessage = async (req, res) => {
     }
 
     const cleanMsg = message.trim();
+
+    // F7: Guard against prompt injection and excessive compute drainage
+    if (cleanMsg.length > MAX_MESSAGE_LENGTH) {
+      return res.status(400).json({
+        message: `Message exceeds the ${MAX_MESSAGE_LENGTH} character limit. Please shorten your question.`
+      });
+    }
+
     await ChatMessage.create({ userId: user._id, text: cleanMsg, isUser: true });
 
     let currentPlan = null;
@@ -145,8 +162,7 @@ const sendChatMessage = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Chat Controller Error:", error);
-    res.status(500).json({ message: "Failed to communicate with AI trainer." });
+    next(error);
   }
 };
 

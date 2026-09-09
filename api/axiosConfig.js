@@ -1,5 +1,5 @@
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getSecureToken } from '../services/tokenService';
 
 // Live Vercel backend URL
 const API_BASE_URL = 'https://pocket-trainer-rouge.vercel.app/api';
@@ -12,10 +12,10 @@ const api = axios.create({
   timeout: 60000, // 60s timeout for cloud model generation
 });
 
-// Automatically inject JWT token from AsyncStorage into request headers
+// Automatically inject JWT token from hardware-backed secure storage
 api.interceptors.request.use(
   async (config) => {
-    const token = await AsyncStorage.getItem('userToken');
+    const token = await getSecureToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
