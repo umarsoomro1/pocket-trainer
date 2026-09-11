@@ -1,6 +1,7 @@
 const axios = require('axios');
 
 const MODAL_AI_URL = process.env.MODAL_AI_URL;
+const AI_API_KEY = process.env.AI_API_KEY;
 
 // Canonical verified exercise pools for all muscle groups including Core / Abs
 const EXERCISE_POOLS = {
@@ -199,7 +200,13 @@ Rules:
     const response = await axios.post(
       MODAL_AI_URL,
       { prompt, system_prompt, max_tokens: 2048, temperature: 0.25 },
-      { headers: { 'Content-Type': 'application/json' }, timeout: 75000 }
+      { 
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-api-key': AI_API_KEY
+        }, 
+        timeout: 75000 
+      }
     );
 
     return (response.data.raw_json || '').replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -249,7 +256,13 @@ Output strictly raw JSON without explanations or markdown tags.`;
     const response = await axios.post(
       MODAL_AI_URL,
       { prompt, system_prompt, max_tokens: 2048, temperature: 0.1 },
-      { headers: { 'Content-Type': 'application/json' }, timeout: 75000 }
+      { 
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-api-key': AI_API_KEY
+        }, 
+        timeout: 75000 
+      }
     );
 
     const parsed = safeJsonParse(response.data.raw_json || '');

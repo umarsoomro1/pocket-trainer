@@ -9,6 +9,9 @@ dotenv.config();
 
 const app = express();
 
+// Trust reverse proxy (Vercel) so req.ip and rate limiters work reliably
+app.set('trust proxy', 1);
+
 // F4: Restrict CORS to authorized origins while permitting mobile direct client networking
 const allowedOrigins = [
   'http://localhost:8081',

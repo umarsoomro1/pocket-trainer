@@ -6,6 +6,7 @@ const authLimiter = rateLimit({
   max: 10, // 10 attempts per window
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false, default: true },
   message: { message: 'Too many login attempts. Please try again after 15 minutes.' }
 });
 
@@ -15,6 +16,7 @@ const otpLimiter = rateLimit({
   max: 5, // Max 5 verification attempts per 15 minutes
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false, default: true },
   message: { message: 'Too many reset attempts. Please request a new code.' }
 });
 
@@ -22,6 +24,7 @@ const otpLimiter = rateLimit({
 const chatLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
   max: 20,
+  validate: { xForwardedForHeader: false, default: true },
   message: { message: 'You are sending messages too quickly. Please slow down.' }
 });
 

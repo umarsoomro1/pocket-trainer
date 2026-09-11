@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
@@ -11,7 +11,7 @@ const LoginScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
   const { login } = useContext(AuthContext);
 
-  // Secure Multi-Step Reset Modal States
+  // Multi-Step Reset Modal States
   const [modalVisible, setModalVisible] = useState(false);
   const [step, setStep] = useState(1); // 1: Email, 2: Code, 3: Password + Confirm Password
   const [resetEmail, setResetEmail] = useState('');
@@ -20,12 +20,44 @@ const LoginScreen = ({ navigation }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
 
+  // Resend Countdown Timer States
+  const [timer, setTimer] = useState(60);
+  const [canResend, setCanResend] = useState(false);
+  const timerRef = useRef(null);
+
+  const startCountdown = () => {
+    setTimer(60);
+    setCanResend(false);
+
+    if (timerRef.current) clearInterval(timerRef.current);
+
+    timerRef.current = setInterval(() => {
+      setTimer((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current);
+          setCanResend(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
   const resetModalState = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
     setModalVisible(false);
     setStep(1);
     setResetCode('');
     setNewPassword('');
     setConfirmPassword('');
+    setTimer(60);
+    setCanResend(false);
   };
 
   const handleLogin = async () => {
@@ -50,11 +82,33 @@ const LoginScreen = ({ navigation }) => {
     }
     setResetLoading(true);
     try {
-      await api.post('/auth/forgot-password', { email: resetEmail.trim() });
-      Alert.alert("Code Sent", "Please check your server logs or email for the 6-digit code.");
+      const response = await api.post('/auth/forgot-password', { email: resetEmail.trim() });
+      Alert.alert(
+        "Notice",
+        response.data?.message || "If an account with that email exists, a reset code was sent."
+      );
+      startCountdown();
       setStep(2);
     } catch (error) {
       Alert.alert("Error", error.response?.data?.message || "Failed to send reset code.");
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  // Resend Code handler (available on Step 2)
+  const handleResendCode = async () => {
+    if (!canResend || resetLoading) return;
+    setResetLoading(true);
+    try {
+      const response = await api.post('/auth/forgot-password', { email: resetEmail.trim() });
+      Alert.alert(
+        "Notice",
+        response.data?.message || "If an account with that email exists, a reset code was sent."
+      );
+      startCountdown();
+    } catch (error) {
+      Alert.alert("Error", error.response?.data?.message || "Failed to resend code.");
     } finally {
       setResetLoading(false);
     }
@@ -73,8 +127,11 @@ const LoginScreen = ({ navigation }) => {
     if (!newPassword || !confirmPassword) {
       return Alert.alert("Required", "Please fill in both password fields.");
     }
-    if (newPassword.length < 6) {
-      return Alert.alert("Weak Password", "Password must be at least 6 characters long.");
+    if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+      return Alert.alert(
+        "Weak Password",
+        "Password must be at least 8 characters long, contain 1 uppercase letter, and 1 number."
+      );
     }
     if (newPassword !== confirmPassword) {
       return Alert.alert("Mismatch", "New password and confirm password do not match.");
@@ -85,7 +142,7 @@ const LoginScreen = ({ navigation }) => {
       await api.post('/auth/reset-password', {
         email: resetEmail.trim(),
         code: resetCode.trim(),
-        newPassword
+        newPassword,
       });
       Alert.alert("Success", "Your password has been reset securely. You can now login.");
       resetModalState();
@@ -150,7 +207,9 @@ const LoginScreen = ({ navigation }) => {
             {/* STEP 1: Enter Email */}
             {step === 1 && (
               <>
-                <Text style={styles.modalSubText}>Enter your account email to receive a 6-digit verification code.</Text>
+                <Text style={styles.modalSubText}>
+                  Enter your account email to receive a 6-digit verification code.
+                </Text>
                 <TextInput
                   style={styles.input}
                   placeholder="Your Email Address"
@@ -169,7 +228,9 @@ const LoginScreen = ({ navigation }) => {
             {/* STEP 2: Enter 6-Digit Code */}
             {step === 2 && (
               <>
-                <Text style={styles.modalSubText}>Enter the 6-digit code sent for {resetEmail}.</Text>
+                <Text style={styles.modalSubText}>
+                  If an account with that email exists, a reset code was sent.
+                </Text>
                 <TextInput
                   style={[styles.input, styles.codeInput]}
                   placeholder="000000"
@@ -182,7 +243,17 @@ const LoginScreen = ({ navigation }) => {
                 <TouchableOpacity style={styles.primaryButton} onPress={handleVerifyCodeStep}>
                   <Text style={styles.buttonText}>Continue</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => setStep(1)} style={{ marginTop: 10, alignItems: 'center' }}>
+
+                {/* Resend Code with 60s Countdown Timer */}
+                <View style={styles.resendRow}>
+                  <TouchableOpacity onPress={handleResendCode} disabled={!canResend || resetLoading}>
+                    <Text style={[styles.resendText, !canResend && styles.disabledResendText]}>
+                      {canResend ? "Resend Code" : `Resend Code in ${timer}s`}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity onPress={() => setStep(1)} style={{ marginTop: 12, alignItems: 'center' }}>
                   <Text style={styles.backStepText}>← Change Email</Text>
                 </TouchableOpacity>
               </>
@@ -191,7 +262,7 @@ const LoginScreen = ({ navigation }) => {
             {/* STEP 3: New Password & Confirm Password */}
             {step === 3 && (
               <>
-                <Text style={styles.modalSubText}>Create a new password for your account.</Text>
+                <Text style={styles.modalSubText}>Create a new password (min. 8 characters, 1 uppercase, 1 digit).</Text>
                 <TextInput
                   style={styles.input}
                   placeholder="New Password"
@@ -242,5 +313,10 @@ const styles = StyleSheet.create({
   modalView: { width: '88%', backgroundColor: theme.card, borderRadius: 20, padding: 24, elevation: 10 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: theme.textPrimary },
-  modalSubText: { fontSize: 14, color: theme.textSecondary, marginBottom: 18, lineHeight: 20 }
+  modalSubText: { fontSize: 14, color: theme.textSecondary, marginBottom: 18, lineHeight: 20 },
+
+  // Resend Component
+  resendRow: { alignItems: 'center', marginTop: 4, marginBottom: 6 },
+  resendText: { color: theme.accent, fontSize: 14, fontWeight: 'bold' },
+  disabledResendText: { color: theme.textSecondary, fontWeight: 'normal' },
 });

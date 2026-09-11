@@ -132,9 +132,11 @@ const forgotPassword = async (req, res, next) => {
     const { email } = parseResult.data;
     const user = await User.findOne({ email });
 
+    const genericMessage = 'If an account with that email exists, a reset code was sent.';
+
     // Anti-enumeration: Identical response regardless of user presence
     if (!user) {
-      return res.status(200).json({ message: 'If that email is registered, a reset code was sent.' });
+      return res.status(200).json({ message: genericMessage });
     }
 
     const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
@@ -146,7 +148,7 @@ const forgotPassword = async (req, res, next) => {
 
     await sendPasswordResetEmail(user.email, resetCode);
 
-    res.status(200).json({ message: 'Reset code sent to your email.' });
+    res.status(200).json({ message: genericMessage });
   } catch (error) {
     next(error);
   }
