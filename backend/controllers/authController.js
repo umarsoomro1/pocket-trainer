@@ -139,11 +139,20 @@ const forgotPassword = async (req, res, next) => {
       return res.status(200).json({ message: genericMessage });
     }
 
+    // Database-level throttle: Prevent spamming reset codes across serverless containers
+    const now = Date.now();
+    if (user.lastOtpSentAt && now - new Date(user.lastOtpSentAt).getTime() < 60 * 1000) {
+      return res.status(429).json({
+        message: 'A code was recently sent. Please wait before requesting another.'
+      });
+    }
+
     const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedCode = crypto.createHash('sha256').update(resetCode).digest('hex');
 
     user.resetPasswordToken = hashedCode;
     user.resetPasswordExpires = Date.now() + 15 * 60 * 1000;
+    user.lastOtpSentAt = new Date();
     await user.save();
 
     await sendPasswordResetEmail(user.email, resetCode);

@@ -15,7 +15,9 @@ const { authLimiter, otpLimiter } = require('../middleware/rateLimiter');
 // Rate-limited authentication & recovery endpoints
 router.post('/register', authLimiter, registerUser);
 router.post('/login', authLimiter, loginUser);
-router.post('/forgot-password', authLimiter, forgotPassword);
+
+// Apply strict otpLimiter to both code generation and code verification
+router.post('/forgot-password', otpLimiter, forgotPassword);
 router.post('/reset-password', otpLimiter, resetPassword);
 
 // Protected user profile routes
