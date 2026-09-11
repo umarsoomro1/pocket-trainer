@@ -21,12 +21,12 @@ const LoginScreen = ({ navigation }) => {
   const [resetLoading, setResetLoading] = useState(false);
 
   // Resend Countdown Timer States
-  const [timer, setTimer] = useState(60);
+  const [timer, setTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
   const timerRef = useRef(null);
 
   const startCountdown = () => {
-    setTimer(60);
+    setTimer(30);
     setCanResend(false);
 
     if (timerRef.current) clearInterval(timerRef.current);
