@@ -8,8 +8,19 @@ const protect = async (req, res, next) => {
     try {
       token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = await User.findById(decoded.id).select('-password');
-      return next(); // Stop further execution in this function
+
+      const user = await User.findById(decoded.id).select('-password');
+      if (!user) {
+        return res.status(401).json({ message: 'User no longer exists.' });
+      }
+
+      // F13: Revoke session if tokenVersion does not match current user record
+      if (decoded.tokenVersion !== undefined && decoded.tokenVersion !== user.tokenVersion) {
+        return res.status(401).json({ message: 'Session expired or revoked. Please log in again.' });
+      }
+
+      req.user = user;
+      return next();
     } catch (error) {
       return res.status(401).json({ message: 'Not authorized, token failed' });
     }

@@ -6,7 +6,7 @@ const { getExerciseGif } = require('../services/exerciseService');
 // @desc    Generate and assign a new plan to the user
 // @route   POST /api/workouts/generate
 // @access  Private
-const generateAndAssignPlan = async (req, res) => {
+const generateAndAssignPlan = async (req, res, next) => {
   try {
     const user = req.user; 
     const { planType } = req.body || {}; 
@@ -62,16 +62,14 @@ const generateAndAssignPlan = async (req, res) => {
 
   } catch (error) {
     console.error("[GENERATION ERROR]:", error.message);
-    return res.status(500).json({ 
-      message: error.message || "Failed to generate plan." 
-    });
+    next(error); // F15: Pass to centralized error handler
   }
 };
 
 // @desc    Get active workout session for today (supports /active and /today)
 // @route   GET /api/workouts/active, GET /api/workouts/today
 // @access  Private
-const getTodaysWorkout = async (req, res) => {
+const getTodaysWorkout = async (req, res, next) => {
   try {
     const user = req.user;
 
@@ -105,14 +103,14 @@ const getTodaysWorkout = async (req, res) => {
     });
   } catch (error) {
     console.error("Get Active Workout Error:", error);
-    return res.status(500).json({ message: error.message });
+    next(error); // F15: Pass to centralized error handler
   }
 };
 
 // @desc    Get dashboard progress and chart data
 // @route   GET /api/workouts/dashboard
 // @access  Private
-const getDashboardData = async (req, res) => {
+const getDashboardData = async (req, res, next) => {
   try {
     const user = req.user;
     const workoutsCompleted = user.current_day_index > 1 ? user.current_day_index - 1 : 0;
@@ -144,14 +142,14 @@ const getDashboardData = async (req, res) => {
       }
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error); // F15: Pass to centralized error handler
   }
 };
 
 // @desc    Mark today's workout as complete and advance the day index
 // @route   POST /api/workouts/complete
 // @access  Private
-const completeWorkout = async (req, res) => {
+const completeWorkout = async (req, res, next) => {
   try {
     const user = req.user;
 
@@ -168,7 +166,7 @@ const completeWorkout = async (req, res) => {
       nextDay: user.current_day_index 
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error); // F15: Pass to centralized error handler
   }
 };
 

@@ -20,6 +20,7 @@ const allowedOrigins = [
   process.env.FRONTEND_URL, // Add your Vercel deployment URL in dashboard env vars
 ].filter(Boolean);
 
+// F19: Removed credentials: true since the app authenticates exclusively via Bearer tokens
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -29,7 +30,6 @@ app.use(
       }
       return callback(new Error('Blocked by CORS security policy.'));
     },
-    credentials: true,
   })
 );
 

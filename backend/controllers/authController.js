@@ -5,12 +5,12 @@ const { z } = require('zod');
 const User = require('../models/User');
 const { sendPasswordResetEmail } = require('../services/emailService');
 
-// F3: Fail immediately if JWT_SECRET is unset; use shortened token lifespan
-const generateToken = (id) => {
+// F3 & F13: Fail immediately if JWT_SECRET is unset; bind tokenVersion to payload
+const generateToken = (id, tokenVersion = 0) => {
   if (!process.env.JWT_SECRET) {
     throw new Error('FATAL: JWT_SECRET environment variable is missing.');
   }
-  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+  return jwt.sign({ id, tokenVersion }, process.env.JWT_SECRET, { expiresIn: '7d' });
 };
 
 // F6: Password complexity rule: min 8 chars, 1 uppercase, 1 digit
@@ -78,12 +78,13 @@ const registerUser = async (req, res, next) => {
       weight: numericWeight,
       goal,
       weightHistory: numericWeight ? [{ weight: numericWeight, date: new Date() }] : [],
+      tokenVersion: 0,
     });
 
     res.status(201).json({
       _id: user._id,
       email: user.email,
-      token: generateToken(user._id),
+      token: generateToken(user._id, user.tokenVersion),
     });
   } catch (error) {
     next(error);
@@ -108,7 +109,7 @@ const loginUser = async (req, res, next) => {
       res.json({
         _id: user._id,
         email: user.email,
-        token: generateToken(user._id),
+        token: generateToken(user._id, user.tokenVersion || 0),
       });
     } else {
       res.status(401).json({ message: 'Invalid email or password.' });
@@ -139,7 +140,7 @@ const forgotPassword = async (req, res, next) => {
       return res.status(200).json({ message: genericMessage });
     }
 
-    // Database-level throttle: Prevent spamming reset codes across serverless containers
+    // Database-level throttle: Prevent spamming reset codes across serverless instances
     const now = Date.now();
     if (user.lastOtpSentAt && now - new Date(user.lastOtpSentAt).getTime() < 60 * 1000) {
       return res.status(429).json({
@@ -190,7 +191,8 @@ const resetPassword = async (req, res, next) => {
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(newPassword, salt);
     
-    // Invalidate OTP tokens immediately after use
+    // F13: Increment tokenVersion to revoke all previously issued active JWT sessions
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
     await user.save();
@@ -269,6 +271,9 @@ const updatePassword = async (req, res, next) => {
 
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(newPassword, salt);
+    
+    // F13: Invalidate previous active sessions across all devices
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
     await user.save();
 
     res.json({ message: 'Password updated successfully.' });
