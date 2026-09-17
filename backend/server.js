@@ -2,17 +2,27 @@ const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const helmet = require('helmet');
+const Sentry = require('@sentry/node');
 const connectDB = require('./config/db');
 
 // Load environment variables
 dotenv.config();
+
+// F17: Initialize Sentry APM before instantiating Express
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || 'development',
+    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
+  });
+}
 
 const app = express();
 
 // Trust reverse proxy (Vercel) so req.ip and rate limiters work reliably
 app.set('trust proxy', 1);
 
-// F4: Restrict CORS to authorized origins while permitting mobile direct client networking
+// F4 & F19: Restrict CORS to authorized origins without credentials: true
 const allowedOrigins = [
   'http://localhost:8081',
   'http://localhost:19006',
@@ -20,7 +30,6 @@ const allowedOrigins = [
   process.env.FRONTEND_URL, // Add your Vercel deployment URL in dashboard env vars
 ].filter(Boolean);
 
-// F19: Removed credentials: true since the app authenticates exclusively via Bearer tokens
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -73,9 +82,19 @@ app.use((req, res) => {
   res.status(404).json({ message: 'Endpoint not found.' });
 });
 
+// F17: Sentry global error capture middleware
+if (typeof Sentry.setupExpressErrorHandler === 'function') {
+  Sentry.setupExpressErrorHandler(app);
+}
+
 // F8: Centralized Production Error Handler (Suppresses internal stack traces & driver leaks)
 app.use((err, req, res, next) => {
   console.error('[SERVER ERROR]:', err);
+
+  // Capture unhandled 500 errors to Sentry
+  if (process.env.SENTRY_DSN) {
+    Sentry.captureException(err);
+  }
 
   const isProduction = process.env.NODE_ENV === 'production';
   const statusCode = err.status || err.statusCode || 500;
