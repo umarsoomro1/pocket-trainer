@@ -3,12 +3,24 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const helmet = require('helmet');
 const Sentry = require('@sentry/node');
+const pino = require('pino');
+const pinoHttp = require('pino-http');
 const connectDB = require('./config/db');
+const CrashLog = require('./models/CrashLog'); // Import CrashLog model
 
-// Load environment variables
 dotenv.config();
 
-// F17: Initialize Sentry APM before instantiating Express
+const logger = pino({
+  level: process.env.LOG_LEVEL || 'info',
+  formatters: {
+    level: (label) => ({ level: label }),
+  },
+  base: {
+    env: process.env.NODE_ENV || 'development',
+  },
+  timestamp: pino.stdTimeFunctions.isoTime,
+});
+
 if (process.env.SENTRY_DSN) {
   Sentry.init({
     dsn: process.env.SENTRY_DSN,
@@ -19,21 +31,64 @@ if (process.env.SENTRY_DSN) {
 
 const app = express();
 
-// Trust reverse proxy (Vercel) so req.ip and rate limiters work reliably
 app.set('trust proxy', 1);
 
-// F4 & F19: Restrict CORS to authorized origins without credentials: true
+app.use(
+  pinoHttp({
+    logger,
+    serializers: {
+      req: (req) => ({
+        id: req.id,
+        method: req.method,
+        url: req.url,
+        ip: req.ip,
+      }),
+      res: (res) => ({
+        statusCode: res.statusCode,
+      }),
+    },
+  })
+);
+
+app.use((req, res, next) => {
+  const originalJson = res.json;
+  res.json = function (body) {
+    if (res.statusCode === 429) {
+      logger.warn({
+        event: 'SECURITY_RATE_LIMIT_EXCEEDED',
+        path: req.path,
+        ip: req.ip,
+        method: req.method,
+      });
+      if (process.env.SENTRY_DSN) {
+        Sentry.captureMessage(
+          `[SECURITY] 429 Rate limit exceeded on ${req.method} ${req.path} by IP ${req.ip}`,
+          'warning'
+        );
+      }
+    } else if (res.statusCode === 401 && req.path.includes('/auth')) {
+      logger.warn({
+        event: 'SECURITY_AUTH_FAILURE',
+        path: req.path,
+        ip: req.ip,
+        method: req.method,
+      });
+    }
+    return originalJson.call(this, body);
+  };
+  next();
+});
+
 const allowedOrigins = [
   'http://localhost:8081',
   'http://localhost:19006',
   'http://localhost:3000',
-  process.env.FRONTEND_URL, // Add your Vercel deployment URL in dashboard env vars
+  process.env.FRONTEND_URL,
 ].filter(Boolean);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow mobile apps / curl / Postman (which lack an origin header) or whitelisted origins
       if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
@@ -42,13 +97,9 @@ app.use(
   })
 );
 
-// Baseline HTTP headers
 app.use(helmet());
-
-// F7: Protect against oversized request payloads
 app.use(express.json({ limit: '100kb' }));
 
-// Ensure MongoDB is connected on every serverless invocation without freezing imports
 app.use(async (req, res, next) => {
   try {
     await connectDB();
@@ -77,21 +128,35 @@ app.use('/workouts', require('./routes/workoutRoutes'));
 app.use('/api/chat', require('./routes/chatRoutes'));
 app.use('/chat', require('./routes/chatRoutes'));
 
-// 404 Handler for unmatched endpoints
+// Crash logging endpoint
+app.use('/api/logs', require('./routes/logRoutes'));
+
+// 404 Handler
 app.use((req, res) => {
   res.status(404).json({ message: 'Endpoint not found.' });
 });
 
-// F17: Sentry global error capture middleware
 if (typeof Sentry.setupExpressErrorHandler === 'function') {
   Sentry.setupExpressErrorHandler(app);
 }
 
-// F8: Centralized Production Error Handler (Suppresses internal stack traces & driver leaks)
+// Centralized Production Error Handler (Persists Server Crashes)
 app.use((err, req, res, next) => {
-  console.error('[SERVER ERROR]:', err);
+  logger.error({ err, path: req.path, method: req.method }, '[SERVER ERROR]');
 
-  // Capture unhandled 500 errors to Sentry
+  // Non-blocking write to MongoDB CrashLog
+  CrashLog.create({
+    source: 'server',
+    message: err.message || 'Unknown server error',
+    stack: err.stack,
+    route: req.path,
+    method: req.method,
+    ip: req.ip,
+    userId: req.user ? req.user._id : undefined,
+  }).catch((dbErr) => {
+    logger.error({ dbErr }, 'Failed to persist crash log to MongoDB');
+  });
+
   if (process.env.SENTRY_DSN) {
     Sentry.captureException(err);
   }
@@ -107,11 +172,10 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Only start listening locally; avoid calling listen in production/Vercel
 const PORT = process.env.PORT || 5000;
 if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
   app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    logger.info(`Server running on port ${PORT}`);
   });
 }
 
