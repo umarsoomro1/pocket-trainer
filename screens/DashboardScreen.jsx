@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView, Dimensions, Modal } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +17,31 @@ const screenWidth = Dimensions.get("window").width;
 // PRODUCTION COOLDOWN: 24 Hours
 const COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
+const PLAN_OPTIONS = ['Push Pull Legs (PPL)', 'Single Muscle (Bro Split)', 'Upper / Lower', 'Double Muscle'];
+
+const CALENDAR_THEME = {
+  calendarBackground: theme.card,
+  textSectionTitleColor: theme.textSecondary,
+  selectedDayBackgroundColor: theme.accent,
+  selectedDayTextColor: theme.background,
+  todayTextColor: theme.accentAlt,
+  dayTextColor: theme.textPrimary,
+  textDisabledColor: '#444444',
+  monthTextColor: theme.accent,
+  arrowColor: theme.accent,
+};
+
+const CHART_CONFIG = {
+  backgroundColor: theme.card,
+  backgroundGradientFrom: theme.card,
+  backgroundGradientTo: theme.card,
+  decimalPlaces: 1,
+  color: (opacity = 1) => `rgba(0, 255, 127, ${opacity})`,
+  labelColor: (opacity = 1) => `rgba(161, 161, 170, ${opacity})`,
+  propsForDots: { r: "5", strokeWidth: "2", stroke: theme.accentAlt },
+  propsForBackgroundLines: { stroke: "#27272a", strokeDasharray: "4" }
+};
+
 const DashboardScreen = ({ navigation }) => {
   const [todaysData, setTodaysData] = useState(null);
   const [progressStats, setProgressStats] = useState(null);
@@ -29,11 +54,11 @@ const DashboardScreen = ({ navigation }) => {
   const [selectedPlanType, setSelectedPlanType] = useState('Push Pull Legs (PPL)');
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Calendar Real-Time Date State
-  const todayString = new Date().toISOString().split('T')[0];
-  const [markedDates, setMarkedDates] = useState({
+  // Calendar Real-Time Date State (memoized to prevent re-renders on timer tick)
+  const todayString = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const markedDates = useMemo(() => ({
     [todayString]: { selected: true, marked: true, selectedColor: theme.accent, selectedTextColor: theme.background }
-  });
+  }), [todayString]);
 
   // 24-Hour Countdown Timer State
   const [timeRemaining, setTimeRemaining] = useState('');
@@ -41,7 +66,6 @@ const DashboardScreen = ({ navigation }) => {
 
   const lastScheduledDateRef = useRef(null);
 
-  const planOptions = ['Push Pull Legs (PPL)', 'Single Muscle (Bro Split)', 'Upper / Lower', 'Double Muscle'];
 
   useEffect(() => {
     registerForPushNotificationsAsync();
@@ -146,7 +170,7 @@ const DashboardScreen = ({ navigation }) => {
     return () => clearInterval(interval);
   }, [todaysData, isRestDay]);
 
-  const handleGeneratePlan = async () => {
+  const handleGeneratePlan = useCallback(async () => {
     setIsGenerating(true);
     try {
       await api.post('/workouts/generate', { planType: selectedPlanType });
@@ -158,9 +182,9 @@ const DashboardScreen = ({ navigation }) => {
     } finally {
       setIsGenerating(false);
     }
-  };
+  }, [selectedPlanType]);
 
-  const handleLogRestDay = async () => {
+  const handleLogRestDay = useCallback(async () => {
     setIsAdvancingRest(true);
     try {
       await cancelWorkoutNotifications();
@@ -172,7 +196,7 @@ const DashboardScreen = ({ navigation }) => {
     } finally {
       setIsAdvancingRest(false);
     }
-  };
+  }, []);
 
   if (loading && !isGenerating) {
     return (
@@ -219,17 +243,7 @@ const DashboardScreen = ({ navigation }) => {
         <Text style={styles.sectionHeader}>Activity Calendar</Text>
         <View style={styles.calendarContainer}>
           <Calendar
-            theme={{
-              calendarBackground: theme.card,
-              textSectionTitleColor: theme.textSecondary,
-              selectedDayBackgroundColor: theme.accent,
-              selectedDayTextColor: theme.background,
-              todayTextColor: theme.accentAlt,
-              dayTextColor: theme.textPrimary,
-              textDisabledColor: '#444444',
-              monthTextColor: theme.accent,
-              arrowColor: theme.accent,
-            }}
+            theme={CALENDAR_THEME}
             markedDates={markedDates}
             hideExtraDays={true}
           />
@@ -246,18 +260,9 @@ const DashboardScreen = ({ navigation }) => {
               yAxisSuffix=" lb"
               fromZero={false}
               segments={4}
-              chartConfig={{
-                backgroundColor: theme.card,
-                backgroundGradientFrom: theme.card,
-                backgroundGradientTo: theme.card,
-                decimalPlaces: 1,
-                color: (opacity = 1) => `rgba(0, 255, 127, ${opacity})`,
-                labelColor: (opacity = 1) => `rgba(161, 161, 170, ${opacity})`,
-                propsForDots: { r: "5", strokeWidth: "2", stroke: theme.accentAlt },
-                propsForBackgroundLines: { stroke: "#27272a", strokeDasharray: "4" }
-              }}
+              chartConfig={CHART_CONFIG}
               bezier
-              style={{ borderRadius: 16, elevation: 4 }}
+              style={styles.chart}
             />
           </View>
         )}
@@ -339,7 +344,7 @@ const DashboardScreen = ({ navigation }) => {
                   </TouchableOpacity>
                 </View>
 
-                {planOptions.map((plan) => (
+                {PLAN_OPTIONS.map((plan) => (
                   <TouchableOpacity 
                     key={plan} 
                     style={[styles.planOptionBtn, selectedPlanType === plan && styles.planOptionActive]}
@@ -366,6 +371,7 @@ export default DashboardScreen;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.background, paddingHorizontal: 20 },
+  chart: { borderRadius: 16, elevation: 4 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   centeredMessage: { alignItems: 'center', marginTop: 20, paddingBottom: 40 },
   headerContainer: { marginTop: 60, marginBottom: 20 },

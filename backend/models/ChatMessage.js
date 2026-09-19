@@ -6,4 +6,7 @@ const chatMessageSchema = new mongoose.Schema({
   isUser: { type: Boolean, required: true } // true = User, false = AI
 }, { timestamps: true });
 
-module.exports = mongoose.model('ChatMessage', chatMessageSchema);
+// Compound index for fast user chat history retrieval with chronological sorting
+chatMessageSchema.index({ userId: 1, createdAt: -1 });
+
+module.exports = mongoose.model('ChatMessage', chatMessageSchema);

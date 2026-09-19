@@ -2,6 +2,7 @@ const WorkoutPlan = require('../models/WorkoutPlan');
 const User = require('../models/User');
 const { generateWorkoutPlan } = require('../services/aiService');
 const { getExerciseGif } = require('../services/exerciseService');
+const logger = require('../config/logger');
 
 // @desc    Generate and assign a new plan to the user
 // @route   POST /api/workouts/generate
@@ -11,7 +12,7 @@ const generateAndAssignPlan = async (req, res, next) => {
     const user = req.user; 
     const { planType } = req.body || {}; 
 
-    console.log(`[GENERATION START] User: ${user._id} | Split: ${planType || 'General'}`);
+    logger.info({ userId: user._id, split: planType || 'General' }, '[GENERATION START]');
 
     // 1. Get structured baseline plan with built-in alternating core exercises
     const generatedData = await generateWorkoutPlan(user, planType || "Push Pull Legs (PPL)");
@@ -53,7 +54,7 @@ const generateAndAssignPlan = async (req, res, next) => {
     user.current_day_index = 1;
     await user.save();
 
-    console.log(`[GENERATION SUCCESS] Plan ID ${newPlan._id} saved successfully.`);
+    logger.info({ planId: newPlan._id }, '[GENERATION SUCCESS]');
 
     return res.status(201).json({ 
       message: "Plan generated successfully!", 
@@ -61,7 +62,7 @@ const generateAndAssignPlan = async (req, res, next) => {
     });
 
   } catch (error) {
-    console.error("[GENERATION ERROR]:", error.message);
+    logger.error({ err: error.message }, '[GENERATION ERROR]');
     next(error); // F15: Pass to centralized error handler
   }
 };
@@ -102,7 +103,7 @@ const getTodaysWorkout = async (req, res, next) => {
       lastWorkoutDate: user.last_workout_date
     });
   } catch (error) {
-    console.error("Get Active Workout Error:", error);
+    logger.error({ err: error }, 'Get Active Workout Error');
     next(error); // F15: Pass to centralized error handler
   }
 };

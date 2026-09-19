@@ -39,5 +39,8 @@ const crashLogSchema = new mongoose.Schema(
 
 // Auto-delete records after 30 days (2,592,000 seconds) to conserve storage
 crashLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
+// Fast filtered lookups by crash source or affected user
+crashLogSchema.index({ source: 1, createdAt: -1 });
+crashLogSchema.index({ userId: 1, createdAt: -1 });
 
-module.exports = mongoose.model('CrashLog', crashLogSchema);
+module.exports = mongoose.model('CrashLog', crashLogSchema);

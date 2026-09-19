@@ -3,23 +3,12 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const helmet = require('helmet');
 const Sentry = require('@sentry/node');
-const pino = require('pino');
 const pinoHttp = require('pino-http');
+const logger = require('./config/logger');
 const connectDB = require('./config/db');
 const CrashLog = require('./models/CrashLog'); // Import CrashLog model
 
 dotenv.config();
-
-const logger = pino({
-  level: process.env.LOG_LEVEL || 'info',
-  formatters: {
-    level: (label) => ({ level: label }),
-  },
-  base: {
-    env: process.env.NODE_ENV || 'development',
-  },
-  timestamp: pino.stdTimeFunctions.isoTime,
-});
 
 if (process.env.SENTRY_DSN) {
   Sentry.init({
@@ -118,17 +107,18 @@ app.get('/api', (req, res) => {
   res.status(200).json({ status: 'healthy', message: 'PocketTrainer /api Endpoint Online' });
 });
 
-// Route Middlewares
+// Legacy path rewrite: canonicalize /auth, /workouts, /chat to /api/*
+app.use((req, res, next) => {
+  if (/^\/(auth|workouts|chat|logs)(\/.*)?$/.test(req.url)) {
+    req.url = '/api' + req.url;
+  }
+  next();
+});
+
+// Canonical Route Middlewares
 app.use('/api/auth', require('./routes/authRoutes'));
-app.use('/auth', require('./routes/authRoutes'));
-
 app.use('/api/workouts', require('./routes/workoutRoutes'));
-app.use('/workouts', require('./routes/workoutRoutes'));
-
 app.use('/api/chat', require('./routes/chatRoutes'));
-app.use('/chat', require('./routes/chatRoutes'));
-
-// Crash logging endpoint
 app.use('/api/logs', require('./routes/logRoutes'));
 
 // 404 Handler

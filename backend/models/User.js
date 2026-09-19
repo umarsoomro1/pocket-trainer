@@ -24,4 +24,7 @@ const userSchema = new mongoose.Schema({
   tokenVersion: { type: Number, default: 0 }
 }, { timestamps: true });
 
-module.exports = mongoose.model('User', userSchema);
+// Sparse index to make OTP verification queries instant without full collection scan
+userSchema.index({ resetPasswordToken: 1, resetPasswordExpires: 1 }, { sparse: true });
+
+module.exports = mongoose.model('User', userSchema);

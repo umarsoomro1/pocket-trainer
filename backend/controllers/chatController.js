@@ -2,6 +2,7 @@ const ChatMessage = require('../models/ChatMessage');
 const WorkoutPlan = require('../models/WorkoutPlan');
 const { generateChatResponse, modifyWorkoutPlan } = require('../services/aiService');
 const { getExerciseGif } = require('../services/exerciseService');
+const logger = require('../config/logger');
 
 // F7: Prompt length constraint
 const MAX_MESSAGE_LENGTH = 500;
@@ -131,9 +132,9 @@ const sendChatMessage = async (req, res, next) => {
         await currentPlan.save();
 
         planWasUpdated = true;
-        console.log(`[AI WORKOUT SYNC] Schedule index ${targetIdx} ("${currentPlan.schedule[targetIdx].title}") updated in MongoDB.`);
+        logger.info({ targetIdx, title: currentPlan.schedule[targetIdx].title }, '[AI WORKOUT SYNC] Schedule updated in MongoDB');
       } else {
-        console.warn("[AI WORKOUT SYNC] Model did not return a valid replacement session structure.");
+        logger.warn('[AI WORKOUT SYNC] Model did not return a valid replacement session structure');
       }
     }
 

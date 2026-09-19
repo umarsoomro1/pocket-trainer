@@ -22,4 +22,7 @@ const workoutPlanSchema = new mongoose.Schema({
   ]
 }, { timestamps: true });
 
-module.exports = mongoose.model('WorkoutPlan', workoutPlanSchema);
+// Index for efficient lookup of user workout plans
+workoutPlanSchema.index({ userId: 1, createdAt: -1 });
+
+module.exports = mongoose.model('WorkoutPlan', workoutPlanSchema);

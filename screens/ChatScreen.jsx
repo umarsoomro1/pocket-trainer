@@ -17,6 +17,9 @@ import { Ionicons } from '@expo/vector-icons';
 import api from '../api/axiosConfig';
 import { theme } from '../theme';
 
+const DEFAULT_MESSAGES = [{ id: 'intro', text: 'Hello! I am your AI Trainer. How can I help you today?', isUser: false }];
+const chatKeyExtractor = (item) => item.id;
+
 const ChatScreen = () => {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
@@ -66,11 +69,15 @@ const ChatScreen = () => {
     }
   };
 
-  const renderMessage = ({ item }) => (
+  const renderMessage = useCallback(({ item }) => (
     <View style={[styles.messageBubble, item.isUser ? styles.userBubble : styles.aiBubble]}>
       <Text style={[styles.messageText, item.isUser ? styles.userText : styles.aiText]}>{item.text}</Text>
     </View>
-  );
+  ), []);
+
+  const handleScrollToEnd = useCallback(() => {
+    flatListRef.current?.scrollToEnd({ animated: true });
+  }, []);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -93,16 +100,12 @@ const ChatScreen = () => {
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <FlatList
               ref={flatListRef}
-              data={
-                messages.length === 0
-                  ? [{ id: 'intro', text: 'Hello! I am your AI Trainer. How can I help you today?', isUser: false }]
-                  : messages
-              }
-              keyExtractor={(item) => item.id}
+              data={messages.length === 0 ? DEFAULT_MESSAGES : messages}
+              keyExtractor={chatKeyExtractor}
               renderItem={renderMessage}
               contentContainerStyle={styles.chatList}
               showsVerticalScrollIndicator={false}
-              onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+              onContentSizeChange={handleScrollToEnd}
             />
           </TouchableWithoutFeedback>
         )}

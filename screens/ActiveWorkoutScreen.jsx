@@ -7,6 +7,8 @@ import api from '../api/axiosConfig';
 import { theme } from '../theme';
 import { useFocusEffect } from '@react-navigation/native';
 
+const exerciseKeyExtractor = (item, index) => `${item.name}-${index}`;
+
 const ActiveWorkoutScreen = ({ route, navigation }) => {
   // Initialize with passed params, keep reactive state for live updates
   const [session, setSession] = useState(route.params?.sessionData || null);
@@ -41,19 +43,17 @@ const ActiveWorkoutScreen = ({ route, navigation }) => {
     }, [])
   );
 
-  const toggleExercise = (index) => {
-    if (completedExercises.includes(index)) {
-      setCompletedExercises(completedExercises.filter((i) => i !== index));
-    } else {
-      setCompletedExercises([...completedExercises, index]);
-    }
-  };
+  const toggleExercise = useCallback((index) => {
+    setCompletedExercises((prev) => 
+      prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]
+    );
+  }, []);
 
-  const openExerciseInfo = (exercise) => {
+  const openExerciseInfo = useCallback((exercise) => {
     setSelectedExercise(exercise);
     setImageError(false);
     setInfoModalVisible(true);
-  };
+  }, []);
 
   const handleFinishWorkout = async () => {
     const hasExercises = session?.exercises && session.exercises.length > 0;
@@ -76,7 +76,7 @@ const ActiveWorkoutScreen = ({ route, navigation }) => {
     }
   };
 
-  const renderExercise = ({ item, index }) => {
+  const renderExercise = useCallback(({ item, index }) => {
     const isDone = completedExercises.includes(index);
     return (
       <View style={[styles.exerciseCard, isDone && styles.exerciseCardDone]}>
@@ -97,15 +97,15 @@ const ActiveWorkoutScreen = ({ route, navigation }) => {
         </TouchableOpacity>
       </View>
     );
-  };
+  }, [completedExercises, openExerciseInfo, toggleExercise]);
 
-  const renderEmptyState = () => (
+  const renderEmptyState = useCallback(() => (
     <View style={styles.emptyStateContainer}>
       <Ionicons name="battery-charging-outline" size={80} color={theme.accent} />
       <Text style={styles.emptyStateTitle}>Rest & Recovery</Text>
       <Text style={styles.emptyStateText}>Take it easy today. Let your muscles recover. Hit 'Finish & Save' to log your recovery day!</Text>
     </View>
-  );
+  ), []);
 
   if (loading && !session) {
     return (
@@ -132,7 +132,7 @@ const ActiveWorkoutScreen = ({ route, navigation }) => {
 
       <FlatList 
         data={session?.exercises || []} 
-        keyExtractor={(item, index) => `${item.name}-${index}`} 
+        keyExtractor={exerciseKeyExtractor} 
         renderItem={renderExercise} 
         contentContainerStyle={styles.listContainer} 
         ListEmptyComponent={renderEmptyState} 
@@ -160,6 +160,8 @@ const ActiveWorkoutScreen = ({ route, navigation }) => {
                 source={{ uri: selectedExercise.gif_url }} 
                 style={styles.gifImage} 
                 contentFit="contain"
+                cachePolicy="memory-disk"
+                priority="high"
                 onError={() => setImageError(true)} 
               />
             ) : (

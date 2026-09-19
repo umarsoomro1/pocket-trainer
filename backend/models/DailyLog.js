@@ -21,4 +21,8 @@ const dailyLogSchema = new mongoose.Schema({
   }]
 }, { timestamps: true });
 
-module.exports = mongoose.model('DailyLog', dailyLogSchema);
+// Compound indexes for user workout history and progress tracking
+dailyLogSchema.index({ userId: 1, date_completed: -1 });
+dailyLogSchema.index({ userId: 1, workoutPlanId: 1 });
+
+module.exports = mongoose.model('DailyLog', dailyLogSchema);

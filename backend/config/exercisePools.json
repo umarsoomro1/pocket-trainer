@@ -1,0 +1,47 @@
+{
+  "Chest": [
+    { "name": "Barbell Bench Press", "sets": 4, "reps_target": "8-10", "rest_seconds": 90, "muscle": "Chest", "benefits": "Primary pectoral compound builder" },
+    { "name": "Incline Dumbbell Press", "sets": 3, "reps_target": "10-12", "rest_seconds": 75, "muscle": "Chest", "benefits": "Upper chest hypertrophy" },
+    { "name": "Decline Barbell Press", "sets": 3, "reps_target": "10-12", "rest_seconds": 75, "muscle": "Chest", "benefits": "Lower pectoral activation" },
+    { "name": "Dumbbell Chest Fly", "sets": 3, "reps_target": "12-15", "rest_seconds": 60, "muscle": "Chest", "benefits": "Pectoral stretch and isolation" },
+    { "name": "Cable Crossover", "sets": 3, "reps_target": "12-15", "rest_seconds": 60, "muscle": "Chest", "benefits": "Continuous inner chest tension" },
+    { "name": "Chest Dips", "sets": 3, "reps_target": "10-12", "rest_seconds": 60, "muscle": "Chest", "benefits": "Lower pec development and mass" }
+  ],
+  "Back": [
+    { "name": "Barbell Deadlift", "sets": 4, "reps_target": "6-8", "rest_seconds": 120, "muscle": "Back", "benefits": "Posterior chain power and density" },
+    { "name": "Lat Pulldown", "sets": 3, "reps_target": "10-12", "rest_seconds": 75, "muscle": "Back", "benefits": "Latissimus dorsi width" },
+    { "name": "Bent-Over Barbell Row", "sets": 3, "reps_target": "8-10", "rest_seconds": 90, "muscle": "Back", "benefits": "Mid-back thickness and rhomboids" },
+    { "name": "Seated Cable Row", "sets": 3, "reps_target": "10-12", "rest_seconds": 60, "muscle": "Back", "benefits": "Lower lat and mid-trap focus" },
+    { "name": "Face Pulls", "sets": 3, "reps_target": "12-15", "rest_seconds": 60, "muscle": "Back", "benefits": "Rear deltoid and rotator cuff health" },
+    { "name": "Barbell Shrugs", "sets": 3, "reps_target": "12-15", "rest_seconds": 60, "muscle": "Back", "benefits": "Upper trapezius development" }
+  ],
+  "Shoulders": [
+    { "name": "Standing Overhead Press", "sets": 4, "reps_target": "8-10", "rest_seconds": 90, "muscle": "Shoulders", "benefits": "Anterior delt and vertical push strength" },
+    { "name": "Dumbbell Lateral Raise", "sets": 4, "reps_target": "12-15", "rest_seconds": 60, "muscle": "Shoulders", "benefits": "Lateral delt cap width" },
+    { "name": "Arnold Press", "sets": 3, "reps_target": "10-12", "rest_seconds": 75, "muscle": "Shoulders", "benefits": "Rotational shoulder hypertrophy" },
+    { "name": "Reverse Pec Deck Fly", "sets": 3, "reps_target": "12-15", "rest_seconds": 60, "muscle": "Shoulders", "benefits": "Posterior deltoid isolation" },
+    { "name": "Front Dumbbell Raise", "sets": 3, "reps_target": "12-15", "rest_seconds": 60, "muscle": "Shoulders", "benefits": "Anterior deltoid definition" }
+  ],
+  "Legs": [
+    { "name": "Barbell Back Squat", "sets": 4, "reps_target": "8-10", "rest_seconds": 120, "muscle": "Legs", "benefits": "Quad and glute compound driver" },
+    { "name": "Romanian Deadlift (RDL)", "sets": 3, "reps_target": "8-10", "rest_seconds": 90, "muscle": "Legs", "benefits": "Hamstring and glute stretch" },
+    { "name": "Leg Press", "sets": 3, "reps_target": "10-12", "rest_seconds": 90, "muscle": "Legs", "benefits": "High-volume quad hypertrophy" },
+    { "name": "Lying Leg Curl", "sets": 3, "reps_target": "12-15", "rest_seconds": 60, "muscle": "Legs", "benefits": "Hamstring isolation" },
+    { "name": "Leg Extension", "sets": 3, "reps_target": "12-15", "rest_seconds": 60, "muscle": "Legs", "benefits": "Direct quadricep burnout" },
+    { "name": "Standing Calf Raise", "sets": 4, "reps_target": "15-20", "rest_seconds": 45, "muscle": "Legs", "benefits": "Gastrocnemius development" }
+  ],
+  "Arms": [
+    { "name": "Barbell Bicep Curl", "sets": 3, "reps_target": "10-12", "rest_seconds": 60, "muscle": "Biceps", "benefits": "Bicep peak and overall mass" },
+    { "name": "Dumbbell Hammer Curl", "sets": 3, "reps_target": "10-12", "rest_seconds": 60, "muscle": "Biceps", "benefits": "Brachialis and forearm thickness" },
+    { "name": "Preacher Curl", "sets": 3, "reps_target": "12-15", "rest_seconds": 60, "muscle": "Biceps", "benefits": "Strict isolated bicep contraction" },
+    { "name": "Skull Crushers", "sets": 3, "reps_target": "10-12", "rest_seconds": 60, "muscle": "Triceps", "benefits": "Tricep long-head mass" },
+    { "name": "Triceps Rope Pushdown", "sets": 3, "reps_target": "12-15", "rest_seconds": 45, "muscle": "Triceps", "benefits": "Lateral head lockout tension" },
+    { "name": "Overhead Tricep Extension", "sets": 3, "reps_target": "10-12", "rest_seconds": 60, "muscle": "Triceps", "benefits": "Tricep stretch under load" }
+  ],
+  "Core": [
+    { "name": "Hanging Leg Raise", "sets": 3, "reps_target": "12-15", "rest_seconds": 60, "muscle": "Abs", "benefits": "Lower abdominal compression and hip flexors" },
+    { "name": "Cable Kneeling Crunch", "sets": 3, "reps_target": "15-20", "rest_seconds": 60, "muscle": "Abs", "benefits": "Upper abdominal progressive overload" },
+    { "name": "Ab Wheel Rollout", "sets": 3, "reps_target": "10-12", "rest_seconds": 60, "muscle": "Abs", "benefits": "Anti-extension core stabilization" },
+    { "name": "Plank to Push-Up", "sets": 3, "reps_target": "45-60s", "rest_seconds": 45, "muscle": "Abs", "benefits": "Isometric core endurance and stability" }
+  ]
+}
