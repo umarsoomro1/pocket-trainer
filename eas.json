@@ -6,19 +6,16 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal",
-      "installCommand": "npm install --include=dev"
+      "distribution": "internal"
     },
     "preview": {
       "distribution": "internal",
-      "installCommand": "npm install --include=dev",
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
-      "autoIncrement": true,
-      "installCommand": "npm install --include=dev"
+      "autoIncrement": true
     }
   },
   "submit": {
