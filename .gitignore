@@ -48,4 +48,3 @@ backend/.env
 *.zip
 *.pdf
 *.docx
-package-lock.json
